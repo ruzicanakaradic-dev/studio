@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-lite-latest";
 
 type BrandInput = { toneChips?: string[]; toneText?: string; bannedWords?: string[] };
 type AiInput = { textLength?: string; emoji?: string; hashtags?: boolean };
@@ -118,7 +118,6 @@ async function callGemini(key: string, model: string, sys: string, user: string)
         maxOutputTokens: 2048,
         temperature: 0.8,
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 },
       },
     }),
   });
@@ -167,8 +166,8 @@ export async function POST(req: Request) {
   const sys = buildSystem(body.brand);
 
   if (geminiKey) {
-    // Jedan poziv po akciji da ne trošimo minutni limit (RPM). Rezerva je lite (non-thinking, pouzdan JSON).
-    const models = [GEMINI_MODEL, "gemini-flash-lite-latest"].filter((m, i, a) => a.indexOf(m) === i);
+    // Lite je non-thinking → pouzdan JSON i najbrži; flash-latest kao rezerva.
+    const models = [GEMINI_MODEL, "gemini-flash-latest"].filter((m, i, a) => a.indexOf(m) === i);
     const tried: string[] = [];
     for (const m of models) {
       try {
