@@ -15,15 +15,17 @@ export function ExportStage({
   slide,
   width,
   overlayOnly = false,
+  srcOverride,
 }: {
   project: Project;
   slide: Slide;
   width: number;
   overlayOnly?: boolean; // za video slajd: samo scrim+tekst+CTA na providnoj podlozi
+  srcOverride?: string | null; // lokalni (blob) URL medija — siguran za izvoz
 }) {
   const fmt = FORMAT_META[project.format];
   const height = Math.round(width * (fmt.h / fmt.w));
-  const url = mediaUrl(slide.mediaId);
+  const url = srcOverride ?? mediaUrl(slide.mediaId);
   return (
     <div
       className="canvas export-board"

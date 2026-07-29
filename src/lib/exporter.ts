@@ -48,6 +48,31 @@ export function safeFileName(name: string): string {
   return clean || "objava";
 }
 
+/**
+ * Pretvori (potencijalno cross-origin) URL medija u lokalni blob URL koji se
+ * može bezbedno „upeći" u izvoz. Rešava problem kada slika/video ne uđe u izvoz
+ * zbog CORS/keš-taint-a (editor učita bez crossOrigin, izvoz traži sa crossOrigin).
+ */
+export async function toCaptureUrl(url: string | null): Promise<string | null> {
+  if (!url) return url;
+  if (url.startsWith("/") || url.startsWith("blob:") || url.startsWith("data:")) return url;
+  // 1) same-origin proxy (server dovuče fajl — nema CORS problema)
+  try {
+    const r = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`, { cache: "reload" });
+    if (r.ok) return URL.createObjectURL(await r.blob());
+  } catch {
+    /* nastavi na fallback */
+  }
+  // 2) direktan CORS fetch (ako proxy nije dostupan, npr. demo bez Supabase-a)
+  try {
+    const r = await fetch(url, { mode: "cors", cache: "reload" });
+    if (r.ok) return URL.createObjectURL(await r.blob());
+  } catch {
+    /* ignore */
+  }
+  return url; // best-effort
+}
+
 function loadImageFromBlob(blob: Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();

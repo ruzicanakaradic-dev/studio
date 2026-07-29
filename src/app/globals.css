@@ -489,7 +489,8 @@ textarea.txt-in{min-height:64px;line-height:1.4}
   .nova-top{padding:14px 16px}
   .np-grid{grid-template-columns:1fr 1fr 1fr}
   .sidebar2{display:none}
-  .screen-scroll{padding:20px 16px 84px}
+  .screen-scroll{padding:20px 16px calc(96px + env(safe-area-inset-bottom));
+    -webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}
   .page-title{font-size:26px}
   .home-head{flex-wrap:wrap}
   .home-grid{grid-template-columns:1fr}
@@ -595,7 +596,7 @@ textarea.txt-in{min-height:64px;line-height:1.4}
 /* ═══════════ MOBILNI EDITOR — vertikalni raspored (mora biti na kraju fajla
    da nadjača bazne .tool-rail/.panel-r definicije; media query ne diže specifičnost) ═══════════ */
 @media(max-width:760px){
-  .ed-body{flex-direction:column;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:80px}
+  .ed-body{flex-direction:column;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;padding-bottom:calc(92px + env(safe-area-inset-bottom))}
   .stage{order:1;flex:none;overflow:visible;padding:12px 12px 8px;width:100%;min-width:0;max-width:100%}
   .canvas-wrap{flex:none;min-height:0;width:100%}
   /* alatke: horizontalni red ispod platna (FOTO/TEKST/BREND/RED/AI) */
@@ -613,7 +614,7 @@ textarea.txt-in{min-height:64px;line-height:1.4}
   .stage-top .fmt-chip{flex:0 0 auto}
 
   /* ── Nova objava: čist vertikalni scroll (bez preklapanja slika i platna) ── */
-  .nova{overflow-y:auto;overflow-x:hidden;padding-bottom:80px}
+  .nova{overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;padding-bottom:calc(92px + env(safe-area-inset-bottom))}
   .nova-cols{display:flex;flex-direction:column;flex:none;overflow:visible;min-height:0}
   .nova-photos,.nova-text{overflow:visible;flex:none;padding:16px}
   .nova-preview{overflow:visible;flex:none;padding:8px 16px 16px;display:block;background:transparent}

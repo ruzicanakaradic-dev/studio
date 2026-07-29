@@ -33,6 +33,7 @@ import {
   exportVideoSlide,
   videoSupported,
   isVideoUrl,
+  toCaptureUrl,
   type ReelsSegment,
 } from "@/lib/exporter";
 
@@ -109,7 +110,7 @@ export default function Studio() {
   const [novaCaps, setNovaCaps] = useState<{ kicker: string; text: string }[]>([]);
   const [novaCapIdx, setNovaCapIdx] = useState(0);
   const [exportJob, setExportJob] = useState<null | {
-    items: { slide: Slide; video: boolean }[];
+    items: { slide: Slide; video: boolean; src: string | null }[];
     project: Project;
     width: number;
   }>(null);
@@ -318,9 +319,9 @@ export default function Studio() {
     const proj = project;
     const fmt = FORMAT_META[proj.format];
     // prepoznaj po svakom slajdu da li je slika ili video (po stvarnom fajlu)
-    const items = proj.slides
+    const items: { slide: Slide; video: boolean; src: string | null }[] = proj.slides
       .filter((s) => s.mediaId)
-      .map((slide) => ({ slide, video: isVideoUrl(mediaUrl(slide.mediaId)) }));
+      .map((slide) => ({ slide, video: isVideoUrl(mediaUrl(slide.mediaId)), src: mediaUrl(slide.mediaId) }));
     if (items.length === 0) {
       showToast("Dodaj bar jedan medij pre izvoza");
       return;
@@ -334,6 +335,15 @@ export default function Studio() {
     const pixelRatio = fmt.w / width; // ciljano ~1080px širine
 
     setExportUI({ pct: 0, label: isReels || hasVideo ? "Spremam…" : "Spremam slike…" });
+
+    // učitaj medije lokalno (blob) da sigurno uđu u izvoz (bez CORS/keš-taint problema)
+    const objectUrls: string[] = [];
+    for (const it of items) {
+      const safe = await toCaptureUrl(mediaUrl(it.slide.mediaId));
+      it.src = safe;
+      if (safe && safe.startsWith("blob:")) objectUrls.push(safe);
+    }
+
     setExportJob({ items, project: proj, width });
 
     // sačekaj dva frejma da se off-screen render iscrta
@@ -371,7 +381,7 @@ export default function Studio() {
               it.video
                 ? {
                     kind: "video",
-                    url: mediaUrl(it.slide.mediaId)!,
+                    url: (it.src || mediaUrl(it.slide.mediaId))!,
                     imgBlob: slideHasOverlay(it.slide) ? capBlobs[i] : undefined,
                     zoom: it.slide.zoom,
                     focus: it.slide.focus,
@@ -405,7 +415,7 @@ export default function Studio() {
             setExportUI({ pct: 30 + Math.round((i / items.length) * 60), label: `Snimam video ${i + 1}/${items.length}…` });
             try {
               const { blob, ext } = await exportVideoSlide({
-                url: mediaUrl(it.slide.mediaId)!,
+                url: (it.src || mediaUrl(it.slide.mediaId))!,
                 overlayBlob: slideHasOverlay(it.slide) ? capBlobs[i] : null,
                 hasOverlay: slideHasOverlay(it.slide),
                 W: fmt.w,
@@ -420,7 +430,7 @@ export default function Studio() {
               console.warn("video slide fallback → original", e);
               // fallback: prosledi originalni video fajl (bez uklopljenog teksta)
               try {
-                const url = mediaUrl(it.slide.mediaId)!;
+                const url = (it.src || mediaUrl(it.slide.mediaId))!;
                 const r = await fetch(url, { mode: "cors" });
                 const blob = await r.blob();
                 const m = url.match(/\.(mp4|mov|webm|m4v)(\?|#|$)/i);
@@ -448,6 +458,13 @@ export default function Studio() {
       console.error("export", err);
       setExportUI({ pct: 100, label: "Izvoz nije uspeo. Pokušaj ponovo.", error: true });
     } finally {
+      objectUrls.forEach((u) => {
+        try {
+          URL.revokeObjectURL(u);
+        } catch {
+          /* ignore */
+        }
+      });
       setExportJob(null);
       setTimeout(() => setExportUI(null), 2800);
     }
@@ -2277,6 +2294,7 @@ export default function Studio() {
               slide={it.slide}
               width={exportJob.width}
               overlayOnly={it.video}
+              srcOverride={it.src}
             />
           ))}
         </div>
