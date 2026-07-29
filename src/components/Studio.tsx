@@ -1425,6 +1425,13 @@ export default function Studio() {
                     <I.Play style={{ width: 13, height: 13 }} /> Pregled
                   </button>
                   <button
+                    className={`fmt-chip${safeZone ? " on" : ""}`}
+                    onClick={() => setSafeZone((v) => !v)}
+                    title="Bezbedna zona — drži tekst/CTA unutar okvira"
+                  >
+                    <I.Frame style={{ width: 13, height: 13 }} /> Safe zone
+                  </button>
+                  <button
                     className="fmt-chip fmt-chip-ai"
                     onClick={() => {
                       setPropTab("ai");

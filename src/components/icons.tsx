@@ -141,6 +141,11 @@ export const Pause = (p: SVGProps<SVGSVGElement>) => (
     <path d="M7 5h4v14H7zM13 5h4v14h-4z" />
   </svg>
 );
+export const Frame = (p: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="3 3" {...p}>
+    <rect x="4" y="4" width="16" height="16" rx="2" />
+  </svg>
+);
 export const AlignLeft = (p: SVGProps<SVGSVGElement>) => (
   <svg {...s(p)}>
     <path d="M3 6h18M3 12h12M3 18h15" />

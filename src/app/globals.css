@@ -595,9 +595,9 @@ textarea.txt-in{min-height:64px;line-height:1.4}
 /* ═══════════ MOBILNI EDITOR — vertikalni raspored (mora biti na kraju fajla
    da nadjača bazne .tool-rail/.panel-r definicije; media query ne diže specifičnost) ═══════════ */
 @media(max-width:760px){
-  .ed-body{flex-direction:column;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:80px}
-  .stage{order:1;flex:none;overflow:visible;padding:14px 12px 8px}
-  .canvas-wrap{flex:none;min-height:0}
+  .ed-body{flex-direction:column;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:80px}
+  .stage{order:1;flex:none;overflow:visible;padding:12px 12px 8px;width:100%;min-width:0;max-width:100%}
+  .canvas-wrap{flex:none;min-height:0;width:100%}
   /* alatke: horizontalni red ispod platna (FOTO/TEKST/BREND/RED/AI) */
   .tool-rail{display:flex;flex-direction:row;width:100%;flex:0 0 auto;height:auto;order:2;gap:6px;padding:8px 12px;
     border-right:none;border-bottom:1px solid var(--line);justify-content:space-between;background:var(--cream-2)}
@@ -608,8 +608,15 @@ textarea.txt-in{min-height:64px;line-height:1.4}
     box-shadow:none;border:none;border-radius:0;background:transparent;overflow:visible}
   .panel-r .panel-h{display:none}
   .panel-r .panel-scroll{overflow:visible;padding:16px 14px 8px}
-  /* format traka: horizontalni scroll umesto prelamanja */
-  .stage-top{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
-  .stage-top::-webkit-scrollbar{display:none}
+  /* format traka: PRELAMANJE (bez horizontalnog scrolla), sve vidljivo */
+  .stage-top{flex-wrap:wrap;overflow:visible;width:100%;min-width:0;padding:0 0 4px;gap:8px}
   .stage-top .fmt-chip{flex:0 0 auto}
+
+  /* ── Nova objava: čist vertikalni scroll (bez preklapanja slika i platna) ── */
+  .nova{overflow-y:auto;overflow-x:hidden;padding-bottom:80px}
+  .nova-cols{display:flex;flex-direction:column;flex:none;overflow:visible;min-height:0}
+  .nova-photos,.nova-text{overflow:visible;flex:none;padding:16px}
+  .nova-preview{overflow:visible;flex:none;padding:8px 16px 16px;display:block;background:transparent}
+  .nova-preview .preview-post{max-width:100%;margin:0 auto}
+  .np-grid{grid-template-columns:repeat(3,1fr)}
 }
