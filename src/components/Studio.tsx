@@ -296,10 +296,10 @@ export default function Studio() {
       });
       const data = await res.json();
       if (data?.error) {
-        setAiMsg("AI trenutno nije dostupan — proveri da je ANTHROPIC_API_KEY dodat u Vercel.");
+        setAiMsg("AI trenutno nije dostupan — proveri da je GEMINI_API_KEY (ili ANTHROPIC_API_KEY) dodat u Vercel.");
         return null;
       }
-      if (data?.demo) setAiMsg("Demo režim — dodaj ANTHROPIC_API_KEY u Vercel za pravi AI.");
+      if (data?.demo) setAiMsg("Demo režim — dodaj GEMINI_API_KEY (besplatno) ili ANTHROPIC_API_KEY u Vercel za pravi AI.");
       return data;
     } catch {
       setAiMsg("Greška u komunikaciji sa AI-jem.");

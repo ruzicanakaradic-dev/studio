@@ -3,7 +3,8 @@ import Anthropic from "@anthropic-ai/sdk";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 const BRAND = `Ti si pomoćnik za marketing brenda "Ružini domaći kolači" — mali domaći biznis koji po porudžbini pravi kolače, torte i sitne kolače.
 Ton: topao, domaći, pristupačan i primamljiv. Piši na srpskom (latinica), kratko i prilagođeno za Instagram i TikTok.
@@ -27,7 +28,7 @@ Predloži kratke tekstove. Vrati JSON: {"title": "kratak udarni naslov (2-5 reč
     case "caption":
       return `Napiši opis (caption) za Instagram/TikTok ${fmt} na temu: "${b.idea || "domaći kolači"}".
 ${b.texts?.length ? `Tekst na objavi: ${b.texts.join(" | ")}.` : ""}
-Vrati JSON: {"caption": "opis 2-4 rečenice sa 1-3 emojija", "hashtags": ["#hashtag", ...  8-12 relevantnih na srpskom i engleskom]}.`;
+Vrati JSON: {"caption": "opis 2-4 rečenice sa 1-3 emojija", "hashtags": ["#hashtag", ... 8-12 relevantnih na srpskom i engleskom]}.`;
     case "improve":
       return `Poboljšaj ovaj tekst za objavu: "${b.text || ""}". Željeni pravac: ${b.tone || "toplo i primamljivo"}.
 Zadrži isti jezik (srpski, latinica). Vrati JSON: {"content": "poboljšan tekst"}.`;
@@ -66,6 +67,41 @@ function extractJson(text: string): unknown {
   return JSON.parse(text.slice(start, end + 1));
 }
 
+async function callGemini(key: string, sys: string, user: string): Promise<unknown> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(
+    key,
+  )}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: sys }] },
+      contents: [{ role: "user", parts: [{ text: user }] }],
+      generationConfig: { maxOutputTokens: 900, temperature: 0.8, responseMimeType: "application/json" },
+    }),
+  });
+  if (!res.ok) throw new Error(`gemini ${res.status}`);
+  const data = await res.json();
+  const text: string =
+    data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "";
+  return extractJson(text);
+}
+
+async function callClaude(key: string, sys: string, user: string): Promise<unknown> {
+  const client = new Anthropic({ apiKey: key });
+  const msg = await client.messages.create({
+    model: ANTHROPIC_MODEL,
+    max_tokens: 900,
+    system: sys,
+    messages: [{ role: "user", content: user }],
+  });
+  const text = msg.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("");
+  return extractJson(text);
+}
+
 export async function POST(req: Request) {
   let body: Body;
   try {
@@ -75,25 +111,16 @@ export async function POST(req: Request) {
   }
   if (!body?.mode) return Response.json({ error: "bad_request" }, { status: 400 });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    // radi u demo režimu dok se ne doda ključ
-    return Response.json(demo(body));
-  }
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+
+  // demo dok nijedan ključ nije podešen
+  if (!geminiKey && !anthropicKey) return Response.json(demo(body));
 
   try {
-    const client = new Anthropic({ apiKey });
-    const msg = await client.messages.create({
-      model: MODEL,
-      max_tokens: 900,
-      system: BRAND,
-      messages: [{ role: "user", content: prompt(body) }],
-    });
-    const text = msg.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
-    return Response.json(extractJson(text));
+    const user = prompt(body);
+    const out = geminiKey ? await callGemini(geminiKey, BRAND, user) : await callClaude(anthropicKey!, BRAND, user);
+    return Response.json(out);
   } catch (e) {
     console.error("AI error", e);
     return Response.json({ error: "ai_failed" }, { status: 502 });
