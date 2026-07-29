@@ -162,9 +162,13 @@ export async function POST(req: Request) {
   const sys = buildSystem(body.brand);
 
   if (geminiKey) {
-    const models = [GEMINI_MODEL, "gemini-3-flash-preview", "gemini-2.0-flash"].filter(
-      (m, i, a) => a.indexOf(m) === i,
-    );
+    const models = [
+      GEMINI_MODEL,
+      "gemini-flash-lite-latest",
+      "gemini-2.0-flash-lite",
+      "gemini-2.0-flash",
+      "gemini-3-flash-preview",
+    ].filter((m, i, a) => a.indexOf(m) === i);
     const tried: string[] = [];
     for (const m of models) {
       try {
