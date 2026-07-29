@@ -45,11 +45,11 @@ const FMT_ICON: Record<Format, React.FC<React.SVGProps<SVGSVGElement>>> = {
 const FMT_ORDER: Format[] = ["post", "story", "reels", "carousel"];
 
 const NAV = [
-  { key: "studio", label: "Studio", note: "početna", icon: I.Grid },
-  { key: "nova", label: "Nova objava", note: "vodič", icon: I.Plus },
-  { key: "platno", label: "Platno", note: "editor", icon: I.ImgIcon },
-  { key: "brend", label: "Brend", note: "logo, boje, fontovi", icon: I.Brand },
-  { key: "ai", label: "AI", note: "podešavanja", icon: I.Sparkle },
+  { key: "studio", label: "Studio", short: "Studio", note: "početna", icon: I.Grid },
+  { key: "nova", label: "Nova objava", short: "Novo", note: "vodič", icon: I.Plus },
+  { key: "platno", label: "Platno", short: "Platno", note: "editor", icon: I.ImgIcon },
+  { key: "brend", label: "Brend", short: "Brend", note: "logo, boje, fontovi", icon: I.Brand },
+  { key: "ai", label: "AI", short: "AI", note: "podešavanja", icon: I.Sparkle },
 ] as const;
 
 const WEEK: { day: string; title: string; status?: string; plum?: boolean }[] = [
@@ -1376,7 +1376,7 @@ export default function Studio() {
               <button className="btn btn-ghost desktop-only" onClick={() => save(false)}>
                 Sačuvaj nacrt
               </button>
-              <button className="btn btn-primary desktop-only" onClick={runExport} disabled={!!exportUI}>
+              <button className="btn btn-primary ed-export" onClick={runExport} disabled={!!exportUI}>
                 <I.Export /> {exportUI ? "Izvozim…" : "Izvezi"}
               </button>
             </div>
@@ -1398,10 +1398,7 @@ export default function Studio() {
                   <button
                     key={key}
                     className={`tool-btn${propTab === key ? " on" : ""}${key === "ai" ? " ai" : ""}`}
-                    onClick={() => {
-                      setPropTab(key);
-                      if (window.innerWidth <= 760) setSheet("props");
-                    }}
+                    onClick={() => setPropTab(key)}
                   >
                     <Ico />
                     {label}
@@ -2193,21 +2190,20 @@ export default function Studio() {
         </main>
       </div>
 
-      {/* ===== MOBILE BOTTOM TABS (van editora) ===== */}
-      {view !== "editor" && (
-        <nav className="btabs">
-          {NAV.map((n) => {
-            const Ico = n.icon;
-            const active = view === n.key;
-            return (
-              <button key={n.key} className={active ? "on" : ""} onClick={() => onNav(n.key)}>
-                <Ico />
-                {n.label}
-              </button>
-            );
-          })}
-        </nav>
-      )}
+      {/* ===== MOBILE BOTTOM TABS ===== */}
+      <nav className="btabs">
+        {NAV.map((n) => {
+          const Ico = n.icon;
+          const active = view === n.key || (n.key === "platno" && view === "editor");
+          return (
+            <button key={n.key} className={active ? "on" : ""} onClick={() => onNav(n.key)}>
+              <span className="btab-ind" />
+              <Ico />
+              {n.short}
+            </button>
+          );
+        })}
+      </nav>
 
       {/* ===== NEW PROJECT MODAL ===== */}
       <div className={`overlay${newOpen ? " on" : ""}`}>
