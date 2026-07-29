@@ -3,8 +3,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "./supabase/client";
 import { MEDIA_BUCKET } from "./supabase/config";
-import { SAMPLE_PROJECTS, SAMPLE_MEDIA, mediaUrl } from "./samples";
-import type { MediaItem, Project } from "./types";
+import { SAMPLE_PROJECTS, SAMPLE_MEDIA, mediaUrl, freshSlide } from "./samples";
+import type { MediaItem, Project, Slide } from "./types";
 
 /**
  * Data layer for the Studio.
@@ -26,6 +26,18 @@ async function ensureSession(supabase: SupabaseClient): Promise<void> {
   }
 }
 
+// backfill defaults for slides saved before newer fields existed
+function normalizeSlide(s: Partial<Slide>): Slide {
+  const base = freshSlide(s.mediaId ?? null);
+  return {
+    ...base,
+    ...s,
+    zoom: s.zoom ?? base.zoom,
+    focus: s.focus ?? base.focus,
+    pos: s.pos ?? base.pos,
+  } as Slide;
+}
+
 function rowToProject(row: Record<string, unknown>): Project {
   const data = (row.data as Partial<Project>) ?? {};
   return {
@@ -33,7 +45,7 @@ function rowToProject(row: Record<string, unknown>): Project {
     name: String(row.name ?? "Bez naziva"),
     format: (row.format as Project["format"]) ?? "post",
     coverMediaId: (row.cover_media_id as string) ?? null,
-    slides: data.slides ?? [],
+    slides: (data.slides ?? []).map(normalizeSlide),
     chrome: data.chrome ?? true,
     updatedAt: String(row.updated_at ?? new Date().toISOString()),
   };
@@ -127,7 +139,8 @@ export async function fetchMedia(): Promise<MediaItem[]> {
     .map((f) => {
       const { data: pub } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(f.name);
       const isVideo = /\.(mp4|mov|webm)$/i.test(f.name);
-      return { id: f.name, name: f.name, url: pub.publicUrl, kind: isVideo ? "video" : "image" };
+      // id === public URL so it resolves on the canvas directly
+      return { id: pub.publicUrl, name: f.name, url: pub.publicUrl, kind: isVideo ? "video" : "image" };
     });
   return [...uploaded, ...SAMPLE_MEDIA];
 }
@@ -141,7 +154,7 @@ export async function uploadMedia(file: File): Promise<MediaItem | null> {
   if (error) return null;
   const { data: pub } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
   return {
-    id: path,
+    id: pub.publicUrl,
     name: file.name,
     url: pub.publicUrl,
     kind: file.type.startsWith("video") ? "video" : "image",

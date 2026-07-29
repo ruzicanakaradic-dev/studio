@@ -36,6 +36,8 @@ export function freshSlide(mediaId: string | null = null): Slide {
     ctaText: "Naruči",
     ctaStyle: "cta-fill",
     scrim: 42,
+    zoom: 1,
+    focus: { x: 50, y: 50 },
     pos: { text: { x: 8, y: 55 }, cta: { x: 8, y: 87 } },
   };
 }

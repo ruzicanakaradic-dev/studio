@@ -9,7 +9,7 @@ export interface Pos {
 
 export interface Slide {
   id: string;
-  mediaId: string | null; // sample id or storage path
+  mediaId: string | null; // sample id or media URL
   title: string;
   sub: string;
   titleSize: number;
@@ -19,6 +19,8 @@ export interface Slide {
   ctaText: string;
   ctaStyle: CtaStyle;
   scrim: number;
+  zoom: number; // 1..3 — uvećanje slike
+  focus: Pos; // 0..100 — kadriranje (object-position)
   pos: { text: Pos; cta: Pos };
 }
 
@@ -54,6 +56,6 @@ export const FORMAT_META: Record<
 > = {
   post: { label: "Objava · 4:5", short: "Objava", ratio: "4 / 5", story: false, carousel: false },
   story: { label: "Story · 9:16", short: "Story", ratio: "9 / 16", story: true, carousel: false },
-  reels: { label: "Reels · 9:16", short: "Reels", ratio: "9 / 16", story: true, carousel: false },
+  reels: { label: "Reels · 9:16", short: "Reels", ratio: "9 / 16", story: false, carousel: false },
   carousel: { label: "Carousel · 4:5", short: "Carousel", ratio: "4 / 5", story: false, carousel: true },
 };

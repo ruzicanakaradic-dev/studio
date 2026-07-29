@@ -86,7 +86,11 @@ export default function Studio() {
   }
   async function save(exported = false) {
     if (!project) return;
-    const toSave = { ...project, updatedAt: new Date().toISOString() };
+    const toSave = {
+      ...project,
+      coverMediaId: project.slides[0]?.mediaId ?? project.coverMediaId,
+      updatedAt: new Date().toISOString(),
+    };
     const res = await persistProject(toSave);
     if (res.id && res.id !== project.id) {
       setProject((p) => (p ? { ...p, id: res.id! } : p));
@@ -117,6 +121,34 @@ export default function Studio() {
         const cur = { ...slides[active] };
         cur.pos = { ...cur.pos, [key]: { x: nx, y: ny } };
         slides[active] = cur;
+        return { ...p, slides };
+      });
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  // ---- background pan (kadriranje) ----
+  function startBgPan(e: React.PointerEvent) {
+    if (!slide?.mediaId) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const start = { x: e.clientX, y: e.clientY };
+    const origin = { ...slide.focus };
+    const move = (ev: PointerEvent) => {
+      const dx = ((ev.clientX - start.x) / rect.width) * 100;
+      const dy = ((ev.clientY - start.y) / rect.height) * 100;
+      const fx = Math.max(0, Math.min(100, origin.x - dx));
+      const fy = Math.max(0, Math.min(100, origin.y - dy));
+      setProject((p) => {
+        if (!p) return p;
+        const slides = p.slides.slice();
+        slides[active] = { ...slides[active], focus: { x: fx, y: fy } };
         return { ...p, slides };
       });
     };
@@ -412,12 +444,25 @@ export default function Studio() {
                         ? { height: "min(72vh,560px)", width: "auto" }
                         : { width: "min(94%,440px)", height: "auto" }),
                     }}
-                    onClick={(e) => {
-                      if (!(e.target as HTMLElement).closest(".ov")) setSelOv(null);
+                    onPointerDown={(e) => {
+                      if ((e.target as HTMLElement).closest(".ov")) return;
+                      setSelOv(null);
+                      startBgPan(e);
                     }}
                   >
                     {mediaUrl(slide.mediaId) ? (
-                      <img className="bg" src={mediaUrl(slide.mediaId)!} alt="" />
+                      <img
+                        className="bg"
+                        src={mediaUrl(slide.mediaId)!}
+                        alt=""
+                        draggable={false}
+                        style={{
+                          objectPosition: `${slide.focus.x}% ${slide.focus.y}%`,
+                          transform: `scale(${slide.zoom})`,
+                          transformOrigin: `${slide.focus.x}% ${slide.focus.y}%`,
+                          cursor: slide.zoom > 1 ? "grab" : "default",
+                        }}
+                      />
                     ) : (
                       <div className="empty">
                         <I.ImgIcon />
@@ -665,6 +710,32 @@ export default function Studio() {
 
                   {propTab === "layer" && (
                     <>
+                      <div className="field">
+                        <label>Zum slike</label>
+                        <div className="range-row">
+                          <input
+                            type="range"
+                            className="range"
+                            min={100}
+                            max={300}
+                            value={Math.round(slide.zoom * 100)}
+                            onChange={(e) => patchSlide({ zoom: +e.target.value / 100 })}
+                          />
+                          <span className="range-val">{Math.round(slide.zoom * 100)}%</span>
+                        </div>
+                        <button
+                          className="chip"
+                          style={{ marginTop: 10 }}
+                          onClick={() => patchSlide({ zoom: 1, focus: { x: 50, y: 50 } })}
+                        >
+                          Resetuj kadar
+                        </button>
+                        <p className="hint" style={{ marginTop: 12 }}>
+                          <I.Info /> Prevuci sliku po platnu da je pomeriš (kadriraš). Zumom je
+                          uvećaj pa je nameštaj.
+                        </p>
+                      </div>
+                      <div className="divide" />
                       <div className="field">
                         <label>Zatamnjenje slike</label>
                         <div className="range-row">
