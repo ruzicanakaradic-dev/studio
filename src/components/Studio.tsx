@@ -1615,7 +1615,7 @@ export default function Studio() {
                             }}
                           >
                             <span className="n">{i + 1}</span>
-                            {u && <img src={u} alt="" />}
+                            {u && (isVideoUrl(u) ? <video src={u} muted playsInline preload="metadata" /> : <img src={u} alt="" />)}
                           </button>
                         );
                       })}
@@ -1727,7 +1727,7 @@ export default function Studio() {
                               const u = mediaUrl(sl.mediaId);
                               return (
                                 <div key={sl.id} className={`layer-item${i === active ? " on" : ""}`} onClick={() => { setActive(i); setSelId(null); }}>
-                                  <span className="red-thumb">{u ? <img src={u} alt="" /> : null}</span>
+                                  <span className="red-thumb">{u ? (isVideoUrl(u) ? <video src={u} muted playsInline preload="metadata" /> : <img src={u} alt="" />) : null}</span>
                                   <span className="layer-name">
                                     {fmt.slideLabel} {i + 1}
                                   </span>
