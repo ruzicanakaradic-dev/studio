@@ -291,3 +291,24 @@ textarea.txt-in{min-height:64px;line-height:1.4}
   .btn{height:40px;padding:0 15px}
 }
 @media(min-width:761px){ .sheet-backdrop{display:none!important} }
+
+/* ---- animacije / pregled ---- */
+.fx{position:absolute;inset:0}
+@keyframes fxFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes fxSlideIn{from{opacity:0;transform:translateX(7%)}to{opacity:1;transform:translateX(0)}}
+@keyframes fxFade{from{opacity:0}to{opacity:1}}
+@keyframes fxRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+
+/* mini dropdown (prelaz / animacija) */
+.mini-select{height:34px;border-radius:10px;border:1px solid var(--line);background:var(--paper);
+  color:var(--plum);font-weight:600;font-size:12.5px;padding:0 10px;cursor:pointer;font-family:inherit}
+.mini-select:focus{outline:none;border-color:var(--plum-300)}
+
+/* delete na dashboard kartici */
+.card-del{position:absolute;top:11px;right:11px;width:30px;height:30px;border-radius:50%;
+  background:rgba(42,32,51,.55);color:#fff;display:grid;place-items:center;backdrop-filter:blur(6px);
+  opacity:0;transition:.15s;z-index:2}
+.card-del svg{width:15px;height:15px}
+.card-del:hover{background:#B4453E}
+.card:hover .card-del{opacity:1}
+@media(max-width:860px){ .card-del{opacity:1;background:rgba(42,32,51,.62)} }

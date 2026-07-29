@@ -50,6 +50,8 @@ export function newProject(format: Format, name = "Bez naziva", mediaId: string 
     coverMediaId: mediaId,
     slides: [freshSlide(mediaId)],
     chrome: true,
+    transition: "fade",
+    textAnim: "rise",
     updatedAt: new Date().toISOString(),
   };
 }

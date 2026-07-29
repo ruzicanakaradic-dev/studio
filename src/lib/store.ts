@@ -47,6 +47,8 @@ function rowToProject(row: Record<string, unknown>): Project {
     coverMediaId: (row.cover_media_id as string) ?? null,
     slides: (data.slides ?? []).map(normalizeSlide),
     chrome: data.chrome ?? true,
+    transition: data.transition ?? "fade",
+    textAnim: data.textAnim ?? "rise",
     updatedAt: String(row.updated_at ?? new Date().toISOString()),
   };
 }
@@ -56,7 +58,7 @@ function projectPayload(p: Project) {
     name: p.name,
     format: p.format,
     cover_media_id: p.coverMediaId,
-    data: { slides: p.slides, chrome: p.chrome },
+    data: { slides: p.slides, chrome: p.chrome, transition: p.transition, textAnim: p.textAnim },
     updated_at: new Date().toISOString(),
   };
 }
@@ -125,6 +127,17 @@ export async function persistProject(
     .select("id")
     .single();
   return { ok: !error, demo: false, id: data?.id as string | undefined };
+}
+
+export async function deleteProject(id: string): Promise<boolean> {
+  const supabase = createClient();
+  if (!supabase) {
+    if (demoProjects) demoProjects = demoProjects.filter((x) => x.id !== id);
+    return true;
+  }
+  await ensureSession(supabase);
+  const { error } = await supabase.from("projects").delete().eq("id", id);
+  return !error;
 }
 
 export async function fetchMedia(): Promise<MediaItem[]> {

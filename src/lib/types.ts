@@ -24,6 +24,9 @@ export interface Slide {
   pos: { text: Pos; cta: Pos };
 }
 
+export type Transition = "none" | "fade" | "slide";
+export type TextAnim = "none" | "fade" | "rise";
+
 export interface Project {
   id: string;
   name: string;
@@ -31,6 +34,8 @@ export interface Project {
   coverMediaId: string | null;
   slides: Slide[];
   chrome: boolean;
+  transition: Transition; // prelaz između slajdova (u pregledu)
+  textAnim: TextAnim; // animacija teksta (u pregledu)
   updatedAt: string; // ISO
 }
 
@@ -50,12 +55,21 @@ export const TEXT_COLORS = [
   "#2A2033",
 ];
 
-export const FORMAT_META: Record<
-  Format,
-  { label: string; short: string; ratio: string; story: boolean; carousel: boolean }
-> = {
-  post: { label: "Objava · 4:5", short: "Objava", ratio: "4 / 5", story: false, carousel: false },
-  story: { label: "Story · 9:16", short: "Story", ratio: "9 / 16", story: true, carousel: false },
-  reels: { label: "Reels · 9:16", short: "Reels", ratio: "9 / 16", story: false, carousel: false },
-  carousel: { label: "Carousel · 4:5", short: "Carousel", ratio: "4 / 5", story: false, carousel: true },
+export interface FormatMeta {
+  label: string;
+  short: string;
+  ratio: string;
+  story: boolean; // prikaži Instagram story okvir (trake + nalog)
+  multi: boolean; // dozvoli više slajdova/strana
+  w: number; // preporučena širina (px)
+  h: number; // preporučena visina (px)
+  slideLabel: string;
+  platform: string;
+}
+
+export const FORMAT_META: Record<Format, FormatMeta> = {
+  post: { label: "Objava · 4:5", short: "Objava", ratio: "4 / 5", story: false, multi: false, w: 1080, h: 1350, slideLabel: "Strana", platform: "Instagram" },
+  story: { label: "Story · 9:16", short: "Story", ratio: "9 / 16", story: true, multi: true, w: 1080, h: 1920, slideLabel: "Strana", platform: "IG + TikTok" },
+  reels: { label: "Reels · 9:16", short: "Reels", ratio: "9 / 16", story: false, multi: true, w: 1080, h: 1920, slideLabel: "Klip", platform: "IG + TikTok" },
+  carousel: { label: "Carousel · 4:5", short: "Carousel", ratio: "4 / 5", story: false, multi: true, w: 1080, h: 1350, slideLabel: "Slajd", platform: "IG + TikTok" },
 };

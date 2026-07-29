@@ -113,6 +113,12 @@ export const Upload = (p: SVGProps<SVGSVGElement>) => (
     <path d="M20 17v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2" />
   </svg>
 );
+export const Trash = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...s(p)}>
+    <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+    <path d="M10 11v6M14 11v6" />
+  </svg>
+);
 export const Play = (p: SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="currentColor" {...p}>
     <path d="M8 5v14l11-7z" />

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Align, CtaStyle, Format, MediaItem, Project, Slide } from "@/lib/types";
 import { FORMAT_META, TEXT_COLORS } from "@/lib/types";
 import { newProject, freshSlide, mediaUrl } from "@/lib/samples";
-import { fetchProjects, fetchMedia, persistProject, uploadMedia } from "@/lib/store";
+import { fetchProjects, fetchMedia, persistProject, uploadMedia, deleteProject } from "@/lib/store";
 import * as I from "./icons";
 
 const FMT_ICON: Record<Format, React.FC<React.SVGProps<SVGSVGElement>>> = {
@@ -40,9 +40,12 @@ export default function Studio() {
   const [sheet, setSheet] = useState<null | "media" | "props">(null);
   const [selOv, setSelOv] = useState<null | "text" | "cta">(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [animKey, setAnimKey] = useState(0);
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
     fetchProjects().then(setProjects);
@@ -180,12 +183,56 @@ export default function Studio() {
   }
   function addSlide() {
     setProject((p) => {
-      if (!p || p.slides.length >= 10) return p;
+      if (!p || p.slides.length >= 20) return p;
       const slides = [...p.slides, freshSlide(null)];
       setActive(slides.length - 1);
       return { ...p, slides };
     });
   }
+  function deleteSlide() {
+    setProject((p) => {
+      if (!p || p.slides.length <= 1) return p;
+      const slides = p.slides.filter((_, i) => i !== active);
+      setActive(Math.max(0, active - 1));
+      return { ...p, slides };
+    });
+  }
+
+  // ---- delete project (dashboard) ----
+  async function removeProject(e: React.MouseEvent, id: string, name: string) {
+    e.stopPropagation();
+    if (!window.confirm(`Obrisati projekat „${name}"? Ovo se ne može poništiti.`)) return;
+    setProjects((list) => list.filter((p) => p.id !== id));
+    await deleteProject(id);
+    showToast("Projekat obrisan");
+  }
+
+  // ---- preview / animacije ----
+  function clearPreviewTimers() {
+    previewTimers.current.forEach(clearTimeout);
+    previewTimers.current = [];
+  }
+  function playPreview() {
+    if (!project || !fmt) return;
+    clearPreviewTimers();
+    setPreviewing(true);
+    setActive(0);
+    setAnimKey((k) => k + 1);
+    const n = fmt.multi ? project.slides.length : 1;
+    const step = 2200;
+    for (let i = 1; i < n; i++) {
+      previewTimers.current.push(
+        setTimeout(() => {
+          setActive(i);
+          setAnimKey((k) => k + 1);
+        }, step * i),
+      );
+    }
+    previewTimers.current.push(
+      setTimeout(() => setPreviewing(false), step * n + 600),
+    );
+  }
+  useEffect(() => () => clearPreviewTimers(), []);
 
   const filtered = filter === "all" ? projects : projects.filter((p) => p.format === filter);
 
@@ -308,18 +355,32 @@ export default function Studio() {
                   const Ico = FMT_ICON[p.format];
                   const url = mediaUrl(p.coverMediaId);
                   return (
-                    <button key={p.id} className="card" onClick={() => openEditor(p)}>
+                    <div
+                      key={p.id}
+                      className="card"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openEditor(p)}
+                      onKeyDown={(e) => e.key === "Enter" && openEditor(p)}
+                    >
                       <div className="card-thumb">
                         <span className="badge">
                           <Ico /> {FORMAT_META[p.format].short}
                         </span>
+                        <button
+                          className="card-del"
+                          title="Obriši projekat"
+                          onClick={(e) => removeProject(e, p.id, p.name)}
+                        >
+                          <I.Trash />
+                        </button>
                         {url && <img src={url} alt="" />}
                       </div>
                       <div className="card-body">
                         <h3>{p.name}</h3>
                         <p>Izmenjeno {relTime(p.updatedAt)}</p>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -432,6 +493,13 @@ export default function Studio() {
                       </button>
                     );
                   })}
+                  <button
+                    className={`fmt-chip${previewing ? " on" : ""}`}
+                    onClick={playPreview}
+                    title="Pregledaj animaciju"
+                  >
+                    <I.Play style={{ width: 13, height: 13 }} /> Pregled
+                  </button>
                 </div>
 
                 <div className="canvas-wrap">
@@ -450,50 +518,72 @@ export default function Studio() {
                       startBgPan(e);
                     }}
                   >
-                    {mediaUrl(slide.mediaId) ? (
-                      <img
-                        className="bg"
-                        src={mediaUrl(slide.mediaId)!}
-                        alt=""
-                        draggable={false}
-                        style={{
-                          objectPosition: `${slide.focus.x}% ${slide.focus.y}%`,
-                          transform: `scale(${slide.zoom})`,
-                          transformOrigin: `${slide.focus.x}% ${slide.focus.y}%`,
-                          cursor: slide.zoom > 1 ? "grab" : "default",
-                        }}
-                      />
-                    ) : (
-                      <div className="empty">
-                        <I.ImgIcon />
-                        <b>Izaberi sliku</b>
-                        <span>Klikni na medij levo da započneš dizajn</span>
-                      </div>
-                    )}
-                    <div className="scrim" style={{ opacity: slide.mediaId ? slide.scrim / 100 : 0 }} />
+                    <div
+                      className="fx"
+                      key={`fx-${animKey}`}
+                      style={
+                        previewing && project.transition !== "none"
+                          ? {
+                              animation: `${
+                                project.transition === "slide" ? "fxSlideIn" : "fxFadeIn"
+                              } .5s ease both`,
+                            }
+                          : undefined
+                      }
+                    >
+                      {mediaUrl(slide.mediaId) ? (
+                        <img
+                          className="bg"
+                          src={mediaUrl(slide.mediaId)!}
+                          alt=""
+                          draggable={false}
+                          style={{
+                            objectPosition: `${slide.focus.x}% ${slide.focus.y}%`,
+                            transform: `scale(${slide.zoom})`,
+                            transformOrigin: `${slide.focus.x}% ${slide.focus.y}%`,
+                            cursor: slide.zoom > 1 ? "grab" : "default",
+                          }}
+                        />
+                      ) : (
+                        <div className="empty">
+                          <I.ImgIcon />
+                          <b>Izaberi sliku</b>
+                          <span>Klikni na medij levo da započneš dizajn</span>
+                        </div>
+                      )}
+                      <div className="scrim" style={{ opacity: slide.mediaId ? slide.scrim / 100 : 0 }} />
 
-                    {fmt.story && (
-                      <div className="ig-bars">
-                        <i className="a" />
-                        <i />
-                        <i />
-                      </div>
-                    )}
-                    {fmt.story && project.chrome && (
-                      <div className="ig-top">
-                        <span className="dot" />
-                        <span className="nm">ruzini_kolaci</span>
-                      </div>
-                    )}
+                      {fmt.story && (
+                        <div className="ig-bars">
+                          <i className="a" />
+                          <i />
+                          <i />
+                        </div>
+                      )}
+                      {fmt.story && project.chrome && (
+                        <div className="ig-top">
+                          <span className="dot" />
+                          <span className="nm">ruzini_kolaci</span>
+                        </div>
+                      )}
+                    </div>
 
                     {slide.mediaId && (
                       <>
                         <div
+                          key={`ovt-${animKey}`}
                           className={`ov${selOv === "text" ? " sel" : ""}`}
                           style={{
                             left: `${slide.pos.text.x}%`,
                             top: `${slide.pos.text.y}%`,
                             textAlign: slide.align,
+                            ...(previewing && project.textAnim !== "none"
+                              ? {
+                                  animation: `${
+                                    project.textAnim === "rise" ? "fxRise" : "fxFade"
+                                  } .55s ease .15s both`,
+                                }
+                              : {}),
                           }}
                           onPointerDown={(e) => startDrag("text", e)}
                         >
@@ -520,8 +610,19 @@ export default function Studio() {
 
                         {slide.cta && (
                           <div
+                            key={`ovc-${animKey}`}
                             className={`ov${selOv === "cta" ? " sel" : ""}`}
-                            style={{ left: `${slide.pos.cta.x}%`, top: `${slide.pos.cta.y}%` }}
+                            style={{
+                              left: `${slide.pos.cta.x}%`,
+                              top: `${slide.pos.cta.y}%`,
+                              ...(previewing && project.textAnim !== "none"
+                                ? {
+                                    animation: `${
+                                      project.textAnim === "rise" ? "fxRise" : "fxFade"
+                                    } .55s ease .28s both`,
+                                  }
+                                : {}),
+                            }}
                             onPointerDown={(e) => startDrag("cta", e)}
                           >
                             <span className={`ov-cta ${slide.ctaStyle}`}>
@@ -534,10 +635,10 @@ export default function Studio() {
                   </div>
                 </div>
 
-                {fmt.carousel && (
+                {fmt.multi && (
                   <div className="carousel">
                     <span className="carousel-label">
-                      Slajd {active + 1}/{project.slides.length}
+                      {fmt.slideLabel} {active + 1}/{project.slides.length}
                     </span>
                     <div style={{ display: "flex", gap: 10 }}>
                       {project.slides.map((sl, i) => {
@@ -554,9 +655,32 @@ export default function Studio() {
                         );
                       })}
                     </div>
-                    <button className="add-slide" onClick={addSlide}>
+                    <button className="add-slide" onClick={addSlide} title={`Dodaj ${fmt.slideLabel.toLowerCase()}`}>
                       <I.Plus />
                     </button>
+                    {project.slides.length > 1 && (
+                      <button
+                        className="add-slide"
+                        onClick={deleteSlide}
+                        title="Obriši trenutni slajd"
+                        style={{ borderStyle: "solid", color: "var(--muted)" }}
+                      >
+                        <I.Trash />
+                      </button>
+                    )}
+                    <span style={{ flex: 1 }} />
+                    <select
+                      className="mini-select"
+                      value={project.transition}
+                      onChange={(e) =>
+                        setProject({ ...project, transition: e.target.value as Project["transition"] })
+                      }
+                      title="Prelaz između slajdova"
+                    >
+                      <option value="none">Prelaz: bez</option>
+                      <option value="fade">Prelaz: pretapanje</option>
+                      <option value="slide">Prelaz: klizanje</option>
+                    </select>
                   </div>
                 )}
               </div>
@@ -648,6 +772,25 @@ export default function Studio() {
                             />
                           ))}
                         </div>
+                      </div>
+                      <div className="divide" />
+                      <div className="field">
+                        <label>Animacija teksta</label>
+                        <select
+                          className="mini-select"
+                          style={{ width: "100%", height: 42 }}
+                          value={project.textAnim}
+                          onChange={(e) =>
+                            setProject({ ...project, textAnim: e.target.value as Project["textAnim"] })
+                          }
+                        >
+                          <option value="none">Bez animacije</option>
+                          <option value="fade">Pretapanje (fade)</option>
+                          <option value="rise">Iskakanje (rise)</option>
+                        </select>
+                        <button className="chip" style={{ marginTop: 12 }} onClick={playPreview}>
+                          <I.Play style={{ width: 12, height: 12, marginRight: 5 }} /> Pregledaj animaciju
+                        </button>
                       </div>
                     </>
                   )}
@@ -824,10 +967,10 @@ export default function Studio() {
           <div className="fmt-list">
             {(
               [
-                ["post", "Objava (Post)", "Uspravno 4:5 · feed"],
-                ["story", "Story", "Vertikalno 9:16 · 24h"],
-                ["reels", "Reels", "Video 9:16"],
-                ["carousel", "Carousel", "Više slajdova 4:5"],
+                ["post", "Objava (Post)", "1080×1350 · 4:5 · jedan medij"],
+                ["story", "Story", "1080×1920 · 9:16 · IG + TikTok"],
+                ["reels", "Reels", "1080×1920 · 9:16 · IG + TikTok"],
+                ["carousel", "Carousel", "1080×1350 · 4:5 · 2–35 slajdova"],
               ] as [Format, string, string][]
             ).map(([f, title, desc]) => {
               const Ico = FMT_ICON[f];
