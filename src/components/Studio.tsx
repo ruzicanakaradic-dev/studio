@@ -88,6 +88,9 @@ export default function Studio() {
     if (!project) return;
     const toSave = { ...project, updatedAt: new Date().toISOString() };
     const res = await persistProject(toSave);
+    if (res.id && res.id !== project.id) {
+      setProject((p) => (p ? { ...p, id: res.id! } : p));
+    }
     setProjects(await fetchProjects());
     if (exported) showToast(res.demo ? "Izvezeno (demo režim)" : "Izvezeno — spremno za Instagram ✦");
     else showToast(res.demo ? "Sačuvano (demo režim)" : "Sačuvano");

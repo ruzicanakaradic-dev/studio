@@ -1,5 +1,6 @@
 "use client";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "./supabase/client";
 import { MEDIA_BUCKET } from "./supabase/config";
 import { SAMPLE_PROJECTS, SAMPLE_MEDIA, mediaUrl } from "./samples";
@@ -7,12 +8,23 @@ import type { MediaItem, Project } from "./types";
 
 /**
  * Data layer for the Studio.
- * When Supabase env is configured, reads/writes the `projects` table and `media` bucket.
+ * When Supabase env is configured, reads/writes the `projects` table and `media` bucket,
+ * using an anonymous session (no login screen yet — see roadmap).
  * Otherwise it degrades gracefully to bundled sample data so the app runs during setup.
  */
 
 // in-memory session store used only in demo (no-Supabase) mode
 let demoProjects: Project[] | null = null;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Ensure there is a session; sign in anonymously if needed. */
+async function ensureSession(supabase: SupabaseClient): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  if (!data.session) {
+    await supabase.auth.signInAnonymously();
+  }
+}
 
 function rowToProject(row: Record<string, unknown>): Project {
   const data = (row.data as Partial<Project>) ?? {};
@@ -27,9 +39,8 @@ function rowToProject(row: Record<string, unknown>): Project {
   };
 }
 
-function projectToRow(p: Project) {
+function projectPayload(p: Project) {
   return {
-    id: p.id,
     name: p.name,
     format: p.format,
     cover_media_id: p.coverMediaId,
@@ -44,15 +55,44 @@ export async function fetchProjects(): Promise<Project[]> {
     if (!demoProjects) demoProjects = [...SAMPLE_PROJECTS];
     return demoProjects;
   }
-  const { data, error } = await supabase
+  await ensureSession(supabase);
+  let { data } = await supabase
     .from("projects")
     .select("*")
     .order("updated_at", { ascending: false });
-  if (error || !data) return [...SAMPLE_PROJECTS];
-  return data.map(rowToProject);
+
+  // First run for this user: seed the sample projects so the studio isn't empty.
+  if (!data || data.length === 0) {
+    const seeded = await seedSamples(supabase);
+    if (seeded) {
+      ({ data } = await supabase
+        .from("projects")
+        .select("*")
+        .order("updated_at", { ascending: false }));
+    }
+  }
+  return (data ?? []).map(rowToProject);
 }
 
-export async function persistProject(p: Project): Promise<{ ok: boolean; demo: boolean }> {
+async function seedSamples(supabase: SupabaseClient): Promise<boolean> {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    const uid = userData.user?.id ?? "anon";
+    const key = `ruzini_seeded_${uid}`;
+    if (typeof window !== "undefined" && window.localStorage.getItem(key)) return false;
+    const rows = SAMPLE_PROJECTS.map((p) => projectPayload(p));
+    const { error } = await supabase.from("projects").insert(rows);
+    if (error) return false;
+    if (typeof window !== "undefined") window.localStorage.setItem(key, "1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function persistProject(
+  p: Project,
+): Promise<{ ok: boolean; demo: boolean; id?: string }> {
   const supabase = createClient();
   if (!supabase) {
     if (!demoProjects) demoProjects = [...SAMPLE_PROJECTS];
@@ -61,8 +101,18 @@ export async function persistProject(p: Project): Promise<{ ok: boolean; demo: b
     else demoProjects.unshift(p);
     return { ok: true, demo: true };
   }
-  const { error } = await supabase.from("projects").upsert(projectToRow(p));
-  return { ok: !error, demo: false };
+  await ensureSession(supabase);
+  if (UUID_RE.test(p.id)) {
+    const { error } = await supabase.from("projects").update(projectPayload(p)).eq("id", p.id);
+    return { ok: !error, demo: false, id: p.id };
+  }
+  // new project — let the DB generate the uuid
+  const { data, error } = await supabase
+    .from("projects")
+    .insert(projectPayload(p))
+    .select("id")
+    .single();
+  return { ok: !error, demo: false, id: data?.id as string | undefined };
 }
 
 export async function fetchMedia(): Promise<MediaItem[]> {
@@ -85,6 +135,7 @@ export async function fetchMedia(): Promise<MediaItem[]> {
 export async function uploadMedia(file: File): Promise<MediaItem | null> {
   const supabase = createClient();
   if (!supabase) return null; // demo mode: uploads disabled
+  await ensureSession(supabase);
   const path = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
   const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file);
   if (error) return null;
