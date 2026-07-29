@@ -1362,7 +1362,7 @@ export default function Studio() {
               <button className="btn btn-ghost desktop-only" onClick={() => save(false)}>
                 Sačuvaj nacrt
               </button>
-              <button className="btn btn-primary" onClick={runExport} disabled={!!exportUI}>
+              <button className="btn btn-primary desktop-only" onClick={runExport} disabled={!!exportUI}>
                 <I.Export /> {exportUI ? "Izvozim…" : "Izvezi"}
               </button>
             </div>
@@ -2108,11 +2108,11 @@ export default function Studio() {
               >
                 <I.TextIcon /> Tekst
               </button>
-              <button className="mt-primary" onClick={() => save(true)}>
+              <button className="mt-primary" onClick={runExport} disabled={!!exportUI}>
                 <span className="ic">
                   <I.Export />
                 </span>
-                Izvezi
+                {exportUI ? "Izvozim…" : "Izvezi"}
               </button>
               <button
                 onClick={() => {

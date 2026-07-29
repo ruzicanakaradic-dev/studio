@@ -58,6 +58,20 @@ const dancing = Dancing_Script({ subsets: ["latin", "latin-ext"], variable: "--f
 export const metadata: Metadata = {
   title: "Ružini domaći kolači — Studio",
   description: "Studio za kreiranje Instagram i TikTok objava, story, reels i carousela.",
+  applicationName: "RDK Studio",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "RDK Studio",
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180" }],
+  },
 };
 
 export const viewport: Viewport = {
