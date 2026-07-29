@@ -6,17 +6,35 @@ export const dynamic = "force-dynamic";
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
-const BRAND = `Ti si pomoćnik za marketing brenda "Ružini domaći kolači" — mali domaći biznis koji po porudžbini pravi kolače, torte i sitne kolače.
-Ton: topao, domaći, pristupačan i primamljiv. Piši na srpskom (latinica), kratko i prilagođeno za Instagram i TikTok.
+type BrandInput = { toneChips?: string[]; toneText?: string; bannedWords?: string[] };
+type AiInput = { textLength?: string; emoji?: string; hashtags?: boolean };
+
+function buildSystem(brand?: BrandInput): string {
+  const chips = brand?.toneChips?.length ? `Ton (ključne reči): ${brand.toneChips.join(", ")}.` : "";
+  const tone = brand?.toneText ? `Uputstvo za ton: ${brand.toneText}` : "";
+  const banned = brand?.bannedWords?.length
+    ? `NIKAD ne koristi ove reči/fraze: ${brand.bannedWords.join(", ")}.`
+    : "";
+  return `Ti si pomoćnik za marketing brenda "Ružini domaći kolači" — mali domaći biznis koji po porudžbini pravi kolače, torte i sitne kolače.
+Piši na srpskom (latinica), za Instagram i TikTok. ${chips} ${tone} ${banned}
 Uvek odgovaraj ISKLJUČIVO validnim JSON-om bez markdown ograda i bez dodatnog teksta.`;
+}
+
+function lengthHint(ai?: AiInput): string {
+  const l = ai?.textLength === "kratko" ? "vrlo kratko (do 1 rečenice)" : ai?.textLength === "duže" ? "duže (3-4 rečenice)" : "srednje (2-3 rečenice)";
+  const e = ai?.emoji === "bez" ? "bez emojija" : ai?.emoji === "slobodno" ? "slobodno koristi emojije" : "najviše 1 emoji";
+  return `Dužina: ${l}. Emoji: ${e}.`;
+}
 
 type Body = {
-  mode: "suggest" | "caption" | "improve" | "layout";
+  mode: "suggest" | "caption" | "improve" | "layout" | "test";
   idea?: string;
   format?: string;
   tone?: string;
   text?: string;
   texts?: string[];
+  brand?: BrandInput;
+  ai?: AiInput;
 };
 
 function prompt(b: Body): string {
@@ -26,12 +44,15 @@ function prompt(b: Body): string {
       return `Za Instagram ${fmt} na temu: "${b.idea || "domaći kolači"}".
 Predloži kratke tekstove. Vrati JSON: {"title": "kratak udarni naslov (2-5 reči)", "subtitle": "podnaslov (do 8 reči)", "cta": "poziv na akciju (1-2 reči, npr. Naruči)"}.`;
     case "caption":
-      return `Napiši opis (caption) za Instagram/TikTok ${fmt} na temu: "${b.idea || "domaći kolači"}".
+      return `Napiši opis (caption) za Instagram/TikTok ${fmt} na temu: "${b.idea || "domaći kolači"}". ${lengthHint(b.ai)}
 ${b.texts?.length ? `Tekst na objavi: ${b.texts.join(" | ")}.` : ""}
-Vrati JSON: {"caption": "opis 2-4 rečenice sa 1-3 emojija", "hashtags": ["#hashtag", ... 8-12 relevantnih na srpskom i engleskom]}.`;
+Vrati JSON: {"caption": "opis", "hashtags": [${b.ai?.hashtags === false ? "" : '"#hashtag", ... 8-12 relevantnih na srpskom i engleskom'}]}.`;
     case "improve":
-      return `Poboljšaj ovaj tekst za objavu: "${b.text || ""}". Željeni pravac: ${b.tone || "toplo i primamljivo"}.
+      return `Poboljšaj ovaj tekst za objavu: "${b.text || ""}". Željeni pravac: ${b.tone || "toplo i primamljivo"}. ${lengthHint(b.ai)}
 Zadrži isti jezik (srpski, latinica). Vrati JSON: {"content": "poboljšan tekst"}.`;
+    case "test":
+      return `Napiši kratak probni caption za objavu domaćih kolača, u tvom tonu. ${lengthHint(b.ai)}
+Vrati JSON: {"content": "tekst objave"}.`;
     case "layout":
       return `Za ${fmt} (vertikalni format), rasporedi ove tekstualne slojeve po platnu radi lepe kompozicije i čitljivosti.
 Slojevi (redom): ${JSON.stringify(b.texts || [])}.
@@ -52,6 +73,8 @@ function demo(b: Body) {
       };
     case "improve":
       return { content: (b.text || "") + " ✨", demo: true };
+    case "test":
+      return { content: "Sveže pečeni sitni kolači, tanka korica i mnogo krema. Naruči do petka 🍰", demo: true };
     case "layout":
       return {
         layout: (b.texts || []).map((_, i) => ({ x: 8, y: 24 + i * 16, size: i === 0 ? 40 : 22, align: "left" })),
@@ -122,6 +145,7 @@ export async function POST(req: Request) {
   if (!geminiKey && !anthropicKey) return Response.json(demo(body));
 
   const user = prompt(body);
+  const sys = buildSystem(body.brand);
 
   if (geminiKey) {
     const models = [GEMINI_MODEL, "gemini-2.0-flash", "gemini-flash-latest", "gemini-1.5-flash"].filter(
@@ -130,7 +154,7 @@ export async function POST(req: Request) {
     const tried: string[] = [];
     for (const m of models) {
       try {
-        const out = await callGemini(geminiKey, m, BRAND, user);
+        const out = await callGemini(geminiKey, m, sys, user);
         return Response.json({ ...(out as object), _via: m, _skipped: tried });
       } catch (e) {
         tried.push(`[${m}] ${(e as Error).message || String(e)}`);
@@ -141,7 +165,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    return Response.json(await callClaude(anthropicKey!, BRAND, user));
+    return Response.json(await callClaude(anthropicKey!, sys, user));
   } catch (e) {
     console.error("Claude error", e);
     return Response.json({ error: "ai_failed", detail: (e as Error).message?.slice(0, 300) }, { status: 502 });

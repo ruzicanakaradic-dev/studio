@@ -5,6 +5,20 @@ import type { Align, CtaStyle, Format, MediaItem, Project, Slide } from "@/lib/t
 import { FORMAT_META, TEXT_COLORS, FONTS, fontCss } from "@/lib/types";
 import { newProject, freshSlide, freshText, mediaUrl } from "@/lib/samples";
 import { fetchProjects, fetchMedia, persistProject, uploadMedia, deleteProject } from "@/lib/store";
+import {
+  type BrandProfile,
+  type AiSettings,
+  DEFAULT_BRAND,
+  DEFAULT_AI,
+  PALETTE,
+  HEADING_FONTS,
+  BODY_FONTS,
+  loadBrand,
+  saveBrand,
+  loadAi,
+  saveAi,
+  applyBrandFonts,
+} from "@/lib/settings";
 import * as I from "./icons";
 
 const FMT_ICON: Record<Format, React.FC<React.SVGProps<SVGSVGElement>>> = {
@@ -68,6 +82,9 @@ export default function Studio() {
   const [aiSuggest, setAiSuggest] = useState<{ title?: string; subtitle?: string; cta?: string } | null>(null);
   const [aiCaption, setAiCaption] = useState<{ caption?: string; hashtags?: string[] } | null>(null);
   const [aiMsg, setAiMsg] = useState<string | null>(null);
+  const [brand, setBrand] = useState<BrandProfile>(DEFAULT_BRAND);
+  const [aiSet, setAiSet] = useState<AiSettings>(DEFAULT_AI);
+  const [aiTest, setAiTest] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -76,6 +93,27 @@ export default function Studio() {
   useEffect(() => {
     fetchProjects().then(setProjects);
     fetchMedia().then(setMedia);
+    const b = loadBrand();
+    setBrand(b);
+    applyBrandFonts(b);
+    setAiSet(loadAi());
+  }, []);
+
+  // persist + apply brand fonts live
+  const updateBrand = useCallback((patch: Partial<BrandProfile>) => {
+    setBrand((prev) => {
+      const next = { ...prev, ...patch };
+      saveBrand(next);
+      applyBrandFonts(next);
+      return next;
+    });
+  }, []);
+  const updateAi = useCallback((patch: Partial<AiSettings>) => {
+    setAiSet((prev) => {
+      const next = { ...prev, ...patch };
+      saveAi(next);
+      return next;
+    });
   }, []);
 
   const showToast = useCallback((msg: string) => {
@@ -323,7 +361,12 @@ export default function Studio() {
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, ...payload }),
+        body: JSON.stringify({
+          mode,
+          brand: { toneChips: brand.toneChips, toneText: brand.toneText, bannedWords: brand.bannedWords },
+          ai: { textLength: aiSet.textLength, emoji: aiSet.emoji, hashtags: aiSet.permissions.hashtags },
+          ...payload,
+        }),
       });
       const data = await res.json();
       if (data?.error) {
@@ -418,6 +461,10 @@ export default function Studio() {
       });
       showToast("Raspoređeno");
     }
+  }
+  async function doTest() {
+    const d = await askAI("test", {});
+    if (d?.content) setAiTest(d.content);
   }
 
   const filtered = filter === "all" ? projects : projects.filter((p) => p.format === filter);
@@ -573,24 +620,298 @@ export default function Studio() {
             </div>
           )}
 
-          {/* ---------- BREND / AI (stižu sledeće) ---------- */}
-          {(view === "brend" || view === "ai") && (
-            <div className="screen-scroll home">
-              <div className="home-head">
-                <div>
-                  <h1 className="page-title">{view === "brend" ? "Brend" : "AI podešavanja"}</h1>
-                  <p className="page-sub">
-                    {view === "brend"
-                      ? "Logo, boje, fontovi, ton glasa i hashtag setovi."
-                      : "Ti odlučuješ koliko AI radi sam. Ništa ne ide na Instagram bez tvoje potvrde."}
-                  </p>
+          {/* ---------- BREND ---------- */}
+          {view === "brend" && (
+            <div className="screen-scroll two-col">
+              <div className="two-col-main">
+                <div style={{ marginBottom: 24 }}>
+                  <h1 className="page-title">Brend</h1>
+                  <p className="page-sub">Sve što AI i predlošci koriste. Postavi jednom — važi za svaku objavu.</p>
+                </div>
+
+                <div className="brand-row">
+                  <div className="brand-card logo-card">
+                    <span className="brand-logo">
+                      <img src="/brand/logo.png" alt="RDK" />
+                    </span>
+                    <div>
+                      <div className="mono-label">Logo</div>
+                      <b className="serif" style={{ fontSize: 17, display: "block", margin: "4px 0 10px" }}>
+                        RDK · pun znak
+                      </b>
+                      <button className="btn btn-outline" style={{ height: 38 }}>
+                        Zameni
+                      </button>
+                    </div>
+                  </div>
+                  <div className="brand-card">
+                    <div className="mono-label" style={{ marginBottom: 12 }}>
+                      Paleta
+                    </div>
+                    <div className="pal-row">
+                      {PALETTE.map((c) => (
+                        <div className="pal" key={c.hex}>
+                          <span className="pal-sw" style={{ background: c.hex, border: c.hex === "#FAF3E4" ? "1px solid var(--line)" : "none" }} />
+                          <b>{c.role}</b>
+                          <i>{c.hex}</i>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mono-label sect">Font naslova</div>
+                <div className="font-grid">
+                  {HEADING_FONTS.map((f) => (
+                    <button
+                      key={f}
+                      className={`font-card${brand.headingFont === f ? " on" : ""}`}
+                      onClick={() => updateBrand({ headingFont: f })}
+                    >
+                      <b style={{ fontFamily: fontCss(f) }}>Ružini kolači</b>
+                      <i>{FONTS.find((x) => x.key === f)?.label}</i>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mono-label sect">Font teksta</div>
+                <div className="body-seg">
+                  {BODY_FONTS.map((f) => (
+                    <button
+                      key={f}
+                      className={brand.bodyFont === f ? "on" : ""}
+                      style={{ fontFamily: fontCss(f) }}
+                      onClick={() => updateBrand({ bodyFont: f })}
+                    >
+                      {FONTS.find((x) => x.key === f)?.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mono-label sect">Ton glasa — ovo čita AI</div>
+                <div className="chip-wrap">
+                  {brand.toneChips.map((t) => (
+                    <button
+                      key={t}
+                      className="tone-chip"
+                      onClick={() => updateBrand({ toneChips: brand.toneChips.filter((x) => x !== t) })}
+                      title="Ukloni"
+                    >
+                      {t}
+                    </button>
+                  ))}
+                  <button
+                    className="tone-chip add"
+                    onClick={() => {
+                      const v = window.prompt("Nova reč za ton:");
+                      if (v) updateBrand({ toneChips: [...brand.toneChips, v.trim()] });
+                    }}
+                  >
+                    + dodaj
+                  </button>
+                </div>
+                <textarea
+                  className="txt-in"
+                  rows={3}
+                  style={{ marginTop: 12 }}
+                  value={brand.toneText}
+                  onChange={(e) => updateBrand({ toneText: e.target.value })}
+                />
+
+                <div className="brand-row" style={{ marginTop: 24 }}>
+                  <div>
+                    <div className="mono-label">Reči koje ne koristimo</div>
+                    <div className="chip-wrap" style={{ marginTop: 10 }}>
+                      {brand.bannedWords.map((w) => (
+                        <button
+                          key={w}
+                          className="ban-chip"
+                          onClick={() => updateBrand({ bannedWords: brand.bannedWords.filter((x) => x !== w) })}
+                          title="Ukloni"
+                        >
+                          {w}
+                        </button>
+                      ))}
+                      <button
+                        className="tone-chip add"
+                        onClick={() => {
+                          const v = window.prompt("Reč koju AI nikad ne koristi:");
+                          if (v) updateBrand({ bannedWords: [...brand.bannedWords, v.trim()] });
+                        }}
+                      >
+                        + dodaj
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mono-label">Hashtag setovi</div>
+                    <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 12 }}>
+                      {brand.hashtagSets.map((h, i) => (
+                        <div key={i}>
+                          <b style={{ fontSize: 13, fontWeight: 800 }}>{h.name}</b>
+                          <input
+                            className="txt-in"
+                            style={{ marginTop: 5, fontFamily: "ui-monospace,monospace", fontSize: 12, color: "var(--plum-700)" }}
+                            value={h.tags}
+                            onChange={(e) => {
+                              const sets = brand.hashtagSets.slice();
+                              sets[i] = { ...sets[i], tags: e.target.value };
+                              updateBrand({ hashtagSets: sets });
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="toggle-row" style={{ marginTop: 24, paddingTop: 18, borderTop: "1px solid var(--line)" }}>
+                  <div>
+                    <b style={{ fontSize: 14 }}>Vodeni pečat sa logom</b>
+                    <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3 }}>Diskretno, u donjem desnom uglu objave.</p>
+                  </div>
+                  <button className={`switch${brand.watermark ? " on" : ""}`} onClick={() => updateBrand({ watermark: !brand.watermark })}>
+                    <i />
+                  </button>
                 </div>
               </div>
-              <div className="wip-card">
-                <I.Sparkle />
-                <b className="serif">Ovaj ekran stiže sledeći</b>
-                <p>Radim ekrane po redu iz dizajna. Ovaj je sledeći na redu — javljam čim bude gotov.</p>
+
+              <aside className="two-col-side">
+                <div className="mono-label" style={{ marginBottom: 12 }}>
+                  Živi pregled
+                </div>
+                <div className="preview-post">
+                  <div className="preview-photo" style={{ backgroundImage: "url(/samples/cake-3.jpg)" }}>
+                    <div className="preview-overlay">
+                      <span className="gold-kicker">Subotom pečemo</span>
+                      <div className="preview-title serif">Krem pita sa vanilom</div>
+                    </div>
+                  </div>
+                  <div className="preview-cap">
+                    <b>ruzini_domaci_kolaci</b>
+                    <p>Tanka korica, mnogo krema, bez šećerne glazure. Piši nam do petka. Sveže rađeno samo za Vas.</p>
+                  </div>
+                </div>
+                <p className="mono-label" style={{ marginTop: 14, lineHeight: 1.5, letterSpacing: ".08em" }}>
+                  Svaka promena fonta, boje ili tona vidi se ovde pre nego što uđe u objavu.
+                </p>
+              </aside>
+            </div>
+          )}
+
+          {/* ---------- AI PODEŠAVANJA ---------- */}
+          {view === "ai" && (
+            <div className="screen-scroll two-col">
+              <div className="two-col-main">
+                <div style={{ marginBottom: 22 }}>
+                  <h1 className="page-title">AI podešavanja</h1>
+                  <p className="page-sub">Ti odlučuješ koliko AI radi sam. Ništa ne ide na Instagram bez tvoje potvrde.</p>
+                </div>
+
+                <div className="quota-card">
+                  <div className="quota-top">
+                    <b>POVEZANO · BESPLATAN NIVO</b>
+                    <span>{aiSet.quotaUsed} / {aiSet.quotaLimit} DNEVNO</span>
+                  </div>
+                  <div className="quota-bar">
+                    <span style={{ width: `${(aiSet.quotaUsed / aiSet.quotaLimit) * 100}%` }} />
+                  </div>
+                  <p>Bez pretplate i bez kartice. Ako pređeš kvotu, Studio pita pre nego što nastavi.</p>
+                </div>
+
+                <div className="ai-cols">
+                  <div>
+                    <div className="mono-label sect">Brzina</div>
+                    <div className="big-seg">
+                      <button className={aiSet.speed === "brzi" ? "on" : ""} onClick={() => updateAi({ speed: "brzi" })}>
+                        <b>BRZI</b>
+                        <i>~2 s · besplatan nivo</i>
+                      </button>
+                      <button className={aiSet.speed === "kvalitetniji" ? "on" : ""} onClick={() => updateAi({ speed: "kvalitetniji" })}>
+                        <b>KVALITETNIJI</b>
+                        <i>~6 s · troši kvotu</i>
+                      </button>
+                    </div>
+                    <div className="mono-label sect">Dužina teksta</div>
+                    <div className="seg3">
+                      {(["kratko", "srednje", "duže"] as const).map((v) => (
+                        <button key={v} className={aiSet.textLength === v ? "on" : ""} onClick={() => updateAi({ textLength: v })}>
+                          {v.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mono-label sect">Emodži</div>
+                    <div className="seg3">
+                      {(["bez", "najviše 1", "slobodno"] as const).map((v) => (
+                        <button key={v} className={aiSet.emoji === v ? "on" : ""} onClick={() => updateAi({ emoji: v })}>
+                          {v.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="mono-label sect">Šta AI sme sam da radi</div>
+                    {(
+                      [
+                        ["caption", "Piše tekst objave", "Tri verzije u tvom tonu, ti biraš."],
+                        ["hashtags", "Predlaže hashtagove", "Do 5, iz tvojih najuspešnijih objava."],
+                        ["timing", "Predlaže vreme objave", "Na osnovu kad tvoja publika gleda."],
+                        ["backgrounds", "Generiše pozadine", "Za objave bez fotografije. Nikad ne izmišlja kolače."],
+                        ["learn", "Uči iz mojih objava", "Čita 128 objava — tekst, ne fotografije."],
+                      ] as [keyof AiSettings["permissions"], string, string][]
+                    ).map(([key, title, desc]) => (
+                      <div className="perm-row" key={key}>
+                        <div>
+                          <b>{title}</b>
+                          <p>{desc}</p>
+                        </div>
+                        <button
+                          className={`switch${aiSet.permissions[key] ? " on" : ""}`}
+                          onClick={() => updateAi({ permissions: { ...aiSet.permissions, [key]: !aiSet.permissions[key] } })}
+                        >
+                          <i />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mono-label sect">Koliko unapred AI radi</div>
+                <div className="auto-grid">
+                  {(
+                    [
+                      ["cekaj", "Predloži i čekaj", "AI priprema, ti odobravaš svaku objavu."],
+                      ["nedelja", "Pripremi celu nedelju", "Ponedeljkom ujutru dobiješ 5 predloga na odobrenje."],
+                      ["samostalno", "Objavljuj samostalno", "Samo za formate koje si već odobrila tri puta."],
+                    ] as [AiSettings["autonomy"], string, string][]
+                  ).map(([key, title, desc]) => (
+                    <button key={key} className={`auto-card${aiSet.autonomy === key ? " on" : ""}`} onClick={() => updateAi({ autonomy: key })}>
+                      <span className="radio-dot" />
+                      <b>{title}</b>
+                      <p>{desc}</p>
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              <aside className="two-col-side">
+                <div className="mono-label" style={{ marginBottom: 12 }}>
+                  Proba sa ovim podešavanjima
+                </div>
+                <button className="btn btn-primary" style={{ width: "100%" }} disabled={!!aiBusy} onClick={doTest}>
+                  <I.Sparkle /> {aiBusy === "test" ? "Radim…" : "Napiši probni tekst"}
+                </button>
+                {aiMsg && (
+                  <p className="hint" style={{ marginTop: 12 }}>
+                    <I.Info /> {aiMsg}
+                  </p>
+                )}
+                {aiTest && <div className="test-box">{aiTest}</div>}
+                <p className="mono-label" style={{ marginTop: 14, lineHeight: 1.5, letterSpacing: ".08em" }}>
+                  Tvoje fotografije se ne koriste za obučavanje modela.
+                </p>
+              </aside>
             </div>
           )}
 
