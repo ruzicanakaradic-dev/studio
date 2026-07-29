@@ -561,3 +561,19 @@ textarea.txt-in{min-height:64px;line-height:1.4}
 .posts-empty{margin-top:18px;padding:34px 18px;text-align:center;color:var(--ink-soft,#6b5f73);
   font-size:14px;border:1px dashed var(--line);border-radius:14px;background:var(--cream-2)}
 @media(max-width:860px){ .filter-seg{flex:1;justify-content:center} .filter-chip{padding:7px 10px} }
+
+/* ===== Izvoz — progress preklop ===== */
+.export-overlay{position:fixed;inset:0;z-index:120;display:grid;place-items:center;
+  background:rgba(42,32,51,.42);backdrop-filter:blur(4px)}
+.export-card{width:min(88vw,340px);background:#fff;border:1px solid var(--line);border-radius:20px;
+  padding:26px 24px;text-align:center;box-shadow:0 30px 70px -24px rgba(42,32,51,.5)}
+.export-card b{display:block;font-size:15px;color:var(--ink,#2B2130);margin:14px 0 12px}
+.export-spin{width:52px;height:52px;margin:0 auto;border-radius:50%;display:grid;place-items:center;
+  background:linear-gradient(150deg,var(--gold,#B58A3C),var(--plum,#63347A));color:#fff}
+.export-spin svg{width:24px;height:24px;animation:expPulse 1s ease-in-out infinite}
+.export-card.err .export-spin{background:#B4453E;font-size:26px;font-weight:800}
+.export-bar{height:8px;border-radius:999px;background:var(--cream-2);overflow:hidden}
+.export-bar span{display:block;height:100%;border-radius:999px;transition:width .3s ease;
+  background:linear-gradient(90deg,var(--gold,#B58A3C),var(--plum,#63347A))}
+.export-hint{margin-top:12px;font-size:12px;color:var(--ink-soft,#6b5f73)}
+@keyframes expPulse{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.14);opacity:1}}

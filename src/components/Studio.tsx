@@ -23,6 +23,15 @@ import {
   bumpAiCalls,
 } from "@/lib/settings";
 import * as I from "./icons";
+import { ExportStage } from "./ExportStage";
+import {
+  captureNodes,
+  zipImages,
+  downloadBlob,
+  safeFileName,
+  exportReelsVideo,
+  videoSupported,
+} from "@/lib/exporter";
 
 const FMT_ICON: Record<Format, React.FC<React.SVGProps<SVGSVGElement>>> = {
   post: I.FmtPost,
@@ -96,7 +105,10 @@ export default function Studio() {
   const [novaTopic, setNovaTopic] = useState("Torta od malina, nova ove nedelje");
   const [novaCaps, setNovaCaps] = useState<{ kicker: string; text: string }[]>([]);
   const [novaCapIdx, setNovaCapIdx] = useState(0);
+  const [exportJob, setExportJob] = useState<null | { slides: Slide[]; project: Project; width: number }>(null);
+  const [exportUI, setExportUI] = useState<null | { pct: number; label: string; error?: boolean }>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -264,6 +276,107 @@ export default function Studio() {
     setProjects(await fetchProjects());
     if (exported) showToast(res.demo ? "Izvezeno (demo režim)" : "Izvezeno — spremno za Instagram ✦");
     else showToast(res.demo ? "Sačuvano (demo režim)" : "Sačuvano");
+  }
+
+  // sačekaj da se sve slike u čvoru učitaju
+  function waitForImages(root: HTMLElement): Promise<void> {
+    const imgs = Array.from(root.querySelectorAll("img"));
+    return Promise.all(
+      imgs.map((img) =>
+        img.complete && img.naturalWidth
+          ? Promise.resolve()
+          : new Promise<void>((res) => {
+              img.onload = () => res();
+              img.onerror = () => res();
+            }),
+      ),
+    ).then(() => undefined);
+  }
+
+  // ---- stvarni izvoz: PNG / ZIP / MP4 zavisno od formata ----
+  async function runExport() {
+    if (!project || exportUI) return;
+    const proj = project;
+    const slides = proj.slides.filter((s) => s.mediaId);
+    if (slides.length === 0) {
+      showToast("Dodaj bar jednu sliku pre izvoza");
+      return;
+    }
+
+    // izmeri trenutno platno da izvoz bude 1:1 sa onim što se vidi
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const width = Math.round(rect?.width || 440);
+    const pixelRatio = FORMAT_META[proj.format].w / width; // ciljano ~1080px širine
+    const isReels = proj.format === "reels";
+
+    setExportUI({ pct: 0, label: isReels ? "Spremam video…" : "Spremam slike…" });
+    setExportJob({ slides, project: proj, width });
+
+    // sačekaj dva frejma da se off-screen render iscrta
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const container = exportRef.current;
+    if (!container) {
+      setExportUI(null);
+      setExportJob(null);
+      return;
+    }
+    const nodes = Array.from(container.querySelectorAll<HTMLElement>(".export-board"));
+    await waitForImages(container);
+    if (typeof document !== "undefined" && document.fonts?.ready) {
+      try {
+        await document.fonts.ready;
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const base = safeFileName(proj.name);
+    try {
+      const blobs = await captureNodes(nodes, pixelRatio, (done, total) =>
+        setExportUI({
+          pct: Math.round((done / total) * (isReels ? 40 : 100)),
+          label: isReels ? `Spremam kadrove… ${done}/${total}` : `Spremam slike… ${done}/${total}`,
+        }),
+      );
+
+      if (isReels) {
+        let videoOk = false;
+        if (videoSupported()) {
+          try {
+            setExportUI({ pct: 45, label: "Snimam video…" });
+            const { blob, ext } = await exportReelsVideo(blobs, proj.transition, (p) =>
+              setExportUI({ pct: 45 + Math.round(p * 50), label: "Snimam video…" }),
+            );
+            downloadBlob(blob, `${base}.${ext}`);
+            setExportUI({ pct: 100, label: `Video spreman ✦ (.${ext})` });
+            videoOk = true;
+          } catch (e) {
+            console.warn("video export fallback", e);
+          }
+        }
+        if (!videoOk) {
+          // fallback: uvek isporuči nešto upotrebljivo — kadrove kao numerisan .zip
+          const zip = await zipImages(blobs, base);
+          downloadBlob(zip, `${base}-reels-kadrovi.zip`);
+          setExportUI({ pct: 100, label: "Video nije podržan — sačuvani su kadrovi (.zip)." });
+        }
+      } else if (blobs.length === 1) {
+        downloadBlob(blobs[0], `${base}.png`);
+        setExportUI({ pct: 100, label: "Slika spremna ✦" });
+      } else {
+        const zip = await zipImages(blobs, base);
+        downloadBlob(zip, `${base}.zip`);
+        setExportUI({ pct: 100, label: `${blobs.length} slika spremno ✦ (.zip)` });
+      }
+      // tiho osveži nacrt (bez dodatnog toasta)
+      persistProject({ ...proj, updatedAt: new Date().toISOString() }).catch(() => {});
+    } catch (err) {
+      console.error("export", err);
+      setExportUI({ pct: 100, label: "Izvoz nije uspeo. Pokušaj ponovo.", error: true });
+    } finally {
+      setExportJob(null);
+      setTimeout(() => setExportUI(null), 2800);
+    }
   }
 
   // ---- drag (text layer / cta) ----
@@ -1183,8 +1296,8 @@ export default function Studio() {
               <button className="btn btn-ghost desktop-only" onClick={() => save(false)}>
                 Sačuvaj nacrt
               </button>
-              <button className="btn btn-primary" onClick={() => save(true)}>
-                <I.Export /> Izvezi
+              <button className="btn btn-primary" onClick={runExport} disabled={!!exportUI}>
+                <I.Export /> {exportUI ? "Izvozim…" : "Izvezi"}
               </button>
             </div>
 
@@ -2014,6 +2127,45 @@ export default function Studio() {
       <div className={`toast${toast ? " on" : ""}`}>
         <I.Check /> <span>{toast}</span>
       </div>
+
+      {/* Skriveni render slajdova za izvoz (1:1 sa platnom) */}
+      {exportJob && (
+        <div
+          ref={exportRef}
+          aria-hidden
+          style={{
+            position: "fixed",
+            left: -100000,
+            top: 0,
+            width: 4000,
+            display: "flex",
+            flexDirection: "column",
+            gap: 40,
+            pointerEvents: "none",
+            zIndex: -1,
+          }}
+        >
+          {exportJob.slides.map((s) => (
+            <ExportStage key={s.id} project={exportJob.project} slide={s} width={exportJob.width} />
+          ))}
+        </div>
+      )}
+
+      {/* Progress preklop tokom izvoza */}
+      {exportUI && (
+        <div className="export-overlay">
+          <div className={`export-card${exportUI.error ? " err" : ""}`}>
+            <div className="export-spin" aria-hidden>
+              {exportUI.pct >= 100 ? (exportUI.error ? "!" : "✓") : <I.Sparkle />}
+            </div>
+            <b>{exportUI.label}</b>
+            <div className="export-bar">
+              <span style={{ width: `${Math.max(6, Math.min(100, exportUI.pct))}%` }} />
+            </div>
+            <p className="export-hint">Fajl se preuzima na uređaj.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
