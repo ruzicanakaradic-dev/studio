@@ -224,7 +224,7 @@ export default function Studio() {
       setNovaCapIdx(0);
     }
   }
-  function novaToEditor() {
+  function buildNovaProject(): Project {
     const title = (novaTopic.split(",")[0] || "Nova objava").trim();
     const photos = novaPhotos.length ? novaPhotos : [null];
     const p = newProject(novaFmt, title);
@@ -238,8 +238,18 @@ export default function Studio() {
       }
       return s;
     });
-    if (novaCaps[novaCapIdx]) p.slides[0].cta = false;
-    openEditor(p);
+    p.caption = novaCaps[novaCapIdx]?.text;
+    return p;
+  }
+  function novaToEditor() {
+    openEditor(buildNovaProject());
+  }
+  async function novaSaveDraft() {
+    const p = buildNovaProject();
+    const res = await persistProject({ ...p, coverMediaId: p.slides[0]?.mediaId ?? null, updatedAt: new Date().toISOString() });
+    setProjects(await fetchProjects());
+    showToast(res.demo ? "Sačuvano kao nacrt (demo)" : "Sačuvano kao nacrt");
+    setView("objave");
   }
   async function save(exported = false) {
     if (!project) return;
@@ -980,6 +990,9 @@ export default function Studio() {
                       </button>
                     ))}
                   </div>
+                  <button className="btn btn-ghost" onClick={novaSaveDraft}>
+                    <I.Check style={{ width: 15, height: 15 }} /> Sačuvaj nacrt
+                  </button>
                   <button className="btn btn-outline" onClick={novaToEditor}>
                     Doradi na platnu
                   </button>

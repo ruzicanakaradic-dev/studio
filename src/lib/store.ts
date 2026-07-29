@@ -96,6 +96,7 @@ function rowToProject(row: Record<string, unknown>): Project {
     chrome: data.chrome ?? true,
     transition: data.transition ?? "fade",
     textAnim: data.textAnim ?? "rise",
+    caption: data.caption,
     updatedAt: String(row.updated_at ?? new Date().toISOString()),
   };
 }
@@ -105,7 +106,7 @@ function projectPayload(p: Project) {
     name: p.name,
     format: p.format,
     cover_media_id: p.coverMediaId,
-    data: { slides: p.slides, chrome: p.chrome, transition: p.transition, textAnim: p.textAnim },
+    data: { slides: p.slides, chrome: p.chrome, transition: p.transition, textAnim: p.textAnim, caption: p.caption },
     updated_at: new Date().toISOString(),
   };
 }

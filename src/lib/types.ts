@@ -78,6 +78,7 @@ export interface Project {
   chrome: boolean;
   transition: Transition; // prelaz između slajdova (u pregledu)
   textAnim: TextAnim; // animacija teksta (u pregledu)
+  caption?: string; // opis objave (Instagram/TikTok) — čuva se uz nacrt
   updatedAt: string; // ISO
 }
 
