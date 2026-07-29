@@ -1,58 +1,48 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Inter, Playfair_Display, Lora, Poppins, Dancing_Script } from "next/font/google";
+import { Playfair_Display, Archivo, Cormorant_Garamond, Lora, Karla } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
+const archivo = Archivo({
   subsets: ["latin", "latin-ext"],
-  variable: "--font-inter",
+  variable: "--font-archivo",
   display: "swap",
+  weight: ["400", "500", "600", "700", "800"],
 });
-
-const fraunces = Fraunces({
-  subsets: ["latin", "latin-ext"],
-  variable: "--font-fraunces",
-  display: "swap",
-  weight: ["400", "500", "600", "700"],
-});
-
 const playfair = Playfair_Display({
   subsets: ["latin", "latin-ext"],
   variable: "--font-playfair",
   display: "swap",
   weight: ["400", "500", "600", "700"],
 });
-
+const cormorant = Cormorant_Garamond({
+  subsets: ["latin", "latin-ext"],
+  variable: "--font-cormorant",
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
+});
 const lora = Lora({
   subsets: ["latin", "latin-ext"],
   variable: "--font-lora",
   display: "swap",
   weight: ["400", "500", "600", "700"],
 });
-
-const poppins = Poppins({
+const karla = Karla({
   subsets: ["latin", "latin-ext"],
-  variable: "--font-poppins",
+  variable: "--font-karla",
   display: "swap",
-  weight: ["400", "500", "600", "700"],
-});
-
-const dancing = Dancing_Script({
-  subsets: ["latin", "latin-ext"],
-  variable: "--font-dancing",
-  display: "swap",
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {
   title: "Ružini domaći kolači — Studio",
-  description: "Studio za kreiranje Instagram objava, story, reels i carousela.",
+  description: "Studio za kreiranje Instagram i TikTok objava, story, reels i carousela.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#4A3566",
+  themeColor: "#63347A",
 };
 
 export default function RootLayout({
@@ -61,7 +51,7 @@ export default function RootLayout({
   return (
     <html
       lang="sr"
-      className={`${inter.variable} ${fraunces.variable} ${playfair.variable} ${lora.variable} ${poppins.variable} ${dancing.variable}`}
+      className={`${archivo.variable} ${playfair.variable} ${cormorant.variable} ${lora.variable} ${karla.variable}`}
     >
       <body>{children}</body>
     </html>

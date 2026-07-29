@@ -38,16 +38,24 @@ export interface FontOption {
 }
 
 export const FONTS: FontOption[] = [
-  { key: "fraunces", label: "Fraunces", css: "var(--font-fraunces), Georgia, serif" },
-  { key: "playfair", label: "Playfair", css: "var(--font-playfair), Georgia, serif" },
+  { key: "playfair", label: "Playfair Display", css: "var(--font-playfair), Georgia, serif" },
+  { key: "cormorant", label: "Cormorant", css: "var(--font-cormorant), Georgia, serif" },
   { key: "lora", label: "Lora", css: "var(--font-lora), Georgia, serif" },
-  { key: "poppins", label: "Poppins", css: "var(--font-poppins), system-ui, sans-serif" },
-  { key: "inter", label: "Inter", css: "var(--font-inter), system-ui, sans-serif" },
-  { key: "dancing", label: "Rukopis", css: "var(--font-dancing), cursive" },
+  { key: "archivo", label: "Archivo", css: "var(--font-archivo), system-ui, sans-serif" },
+  { key: "karla", label: "Karla", css: "var(--font-karla), system-ui, sans-serif" },
 ];
 
+// mapiranje starih font ključeva na nove (kompatibilnost sa ranije sačuvanim projektima)
+const FONT_ALIAS: Record<string, string> = {
+  fraunces: "playfair",
+  inter: "archivo",
+  poppins: "archivo",
+  dancing: "cormorant",
+};
+
 export function fontCss(key: string): string {
-  return (FONTS.find((f) => f.key === key) ?? FONTS[0]).css;
+  const k = FONT_ALIAS[key] ?? key;
+  return (FONTS.find((f) => f.key === k) ?? FONTS[0]).css;
 }
 
 export type Transition = "none" | "fade" | "slide";

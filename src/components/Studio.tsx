@@ -335,8 +335,8 @@ export default function Studio() {
       const slides = p.slides.slice();
       const cur = { ...slides[active] };
       const adds = [];
-      if (aiSuggest.title) adds.push(freshText({ content: aiSuggest.title, font: "fraunces", size: 40, pos: { x: 8, y: 50 } }));
-      if (aiSuggest.subtitle) adds.push(freshText({ content: aiSuggest.subtitle, font: "inter", size: 18, pos: { x: 8, y: 65 } }));
+      if (aiSuggest.title) adds.push(freshText({ content: aiSuggest.title, font: "playfair", size: 40, pos: { x: 8, y: 50 } }));
+      if (aiSuggest.subtitle) adds.push(freshText({ content: aiSuggest.subtitle, font: "archivo", size: 18, pos: { x: 8, y: 65 } }));
       cur.texts = [...cur.texts, ...adds];
       if (aiSuggest.cta) {
         cur.cta = true;
@@ -401,20 +401,7 @@ export default function Studio() {
       <header className="topbar">
         <button className="brand" onClick={() => setView("dash")}>
           <span className="logo-mark" aria-hidden>
-            <svg viewBox="0 0 24 24" fill="none">
-              <path
-                d="M12 3c2.2 1.4 3.4 3.2 3.4 5.2 0 1.9-1.5 3.3-3.4 3.3S8.6 10.1 8.6 8.2C8.6 6.2 9.8 4.4 12 3Z"
-                fill="#C9A96E"
-              />
-              <path
-                d="M4.5 12.5h15c.6 0 1 .5.9 1.1l-.8 5.1a2 2 0 0 1-2 1.7H6.4a2 2 0 0 1-2-1.7l-.8-5.1c-.1-.6.3-1.1.9-1.1Z"
-                fill="#fff"
-                opacity=".92"
-              />
-              <circle cx="8.4" cy="16" r="1.1" fill="#4A3566" />
-              <circle cx="12" cy="16.6" r="1.1" fill="#4A3566" />
-              <circle cx="15.6" cy="16" r="1.1" fill="#4A3566" />
-            </svg>
+            <img src="/brand/logo.png" alt="Ružini domaći kolači" />
           </span>
           <span className="brand-txt">
             <b>Ružini domaći kolači</b>

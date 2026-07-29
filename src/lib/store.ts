@@ -43,7 +43,7 @@ function normalizeSlide(raw: unknown): Slide {
       legacy.push(
         freshText({
           content: s.title as string,
-          font: (s.font as string) ?? "fraunces",
+          font: (s.font as string) ?? "playfair",
           size,
           color,
           align,
@@ -55,7 +55,7 @@ function normalizeSlide(raw: unknown): Slide {
       legacy.push(
         freshText({
           content: s.sub as string,
-          font: "inter",
+          font: "archivo",
           size: Math.max(13, size * 0.42),
           color,
           align,

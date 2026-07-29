@@ -27,7 +27,7 @@ export function freshText(over: Partial<Slide["texts"][number]> = {}): Slide["te
   return {
     id: uid("txt"),
     content: "Novi tekst",
-    font: "inter",
+    font: "archivo",
     size: 24,
     color: "#FFFFFF",
     align: "left",
@@ -42,8 +42,8 @@ export function freshSlide(mediaId: string | null = null): Slide {
     id: uid("slide"),
     mediaId,
     texts: [
-      freshText({ content: "Domaći sitni kolači", font: "fraunces", size: 38, pos: { x: 8, y: 54 } }),
-      freshText({ content: "Ručno pravljeni, sa ljubavlju", font: "inter", size: 17, pos: { x: 8, y: 68 } }),
+      freshText({ content: "Domaći sitni kolači", font: "playfair", size: 38, pos: { x: 8, y: 54 } }),
+      freshText({ content: "Ručno pravljeni, sa ljubavlju", font: "archivo", size: 17, pos: { x: 8, y: 68 } }),
     ],
     cta: true,
     ctaText: "Naruči",
