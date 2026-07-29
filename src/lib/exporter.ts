@@ -1,17 +1,16 @@
 "use client";
 
-import { toBlob, getFontEmbedCSS } from "html-to-image";
 import JSZip from "jszip";
+import { fontCss } from "./types";
+import type { Project, Slide } from "./types";
 
 /**
- * Izvoz gotovih objava iz Studija — SVESTAN je tipa medija po svakom slajdu.
- * Svaki slajd zna da li je slika ili video (po ekstenziji stvarnog fajla), pa se
- * i izvozi u skladu s tim: slika → PNG, video → MP4/WebM (sa uklopljenim tekstom/CTA).
- * Mešoviti carousel/story (npr. 2 videa + 5 slika) → jedan .zip sa numerisanim
- * fajlovima gde svaki ima svoju ekstenziju (naziv-1.png, naziv-2.mp4, …).
+ * Izvoz objava — sve se crta DIREKTNO na <canvas> (bez html-to-image),
+ * jer je to jedini pouzdan način na iOS Safariju. Slika → PNG, video → MP4/WebM
+ * sa uklopljenim tekstom/CTA. Mešoviti carousel/story → numerisan .zip.
  */
 
-// -------- pomoćne --------
+// ---------------- osnovno ----------------
 
 export function isVideoUrl(url: string | null | undefined): boolean {
   return !!url && /\.(mp4|mov|webm|m4v)(\?|#|$)/i.test(url);
@@ -34,7 +33,6 @@ const TRANSLIT: Record<string, string> = {
   Č: "C", Ć: "C", Š: "S", Ž: "Z", Đ: "Dj",
 };
 
-/** Očisti naziv u bezbedno ASCII ime fajla (bez č/ć/š/ž/đ i specijalnih znakova). */
 export function safeFileName(name: string): string {
   const ascii = (name || "objava")
     .replace(/[čćšžđČĆŠŽĐ]/g, (m) => TRANSLIT[m] ?? m)
@@ -48,39 +46,30 @@ export function safeFileName(name: string): string {
   return clean || "objava";
 }
 
-/**
- * Pretvori (potencijalno cross-origin) URL medija u lokalni blob URL koji se
- * može bezbedno „upeći" u izvoz. Rešava problem kada slika/video ne uđe u izvoz
- * zbog CORS/keš-taint-a (editor učita bez crossOrigin, izvoz traži sa crossOrigin).
- */
+/** (potencijalno cross-origin) URL → lokalni blob URL (bez CORS/keš-taint problema). */
 export async function toCaptureUrl(url: string | null): Promise<string | null> {
   if (!url) return url;
   if (url.startsWith("/") || url.startsWith("blob:") || url.startsWith("data:")) return url;
-  // 1) same-origin proxy (server dovuče fajl — nema CORS problema)
   try {
     const r = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`, { cache: "reload" });
     if (r.ok) return URL.createObjectURL(await r.blob());
   } catch {
-    /* nastavi na fallback */
+    /* fallback */
   }
-  // 2) direktan CORS fetch (ako proxy nije dostupan, npr. demo bez Supabase-a)
   try {
     const r = await fetch(url, { mode: "cors", cache: "reload" });
     if (r.ok) return URL.createObjectURL(await r.blob());
   } catch {
     /* ignore */
   }
-  return url; // best-effort
+  return url;
 }
 
-function loadImageFromBlob(blob: Blob): Promise<HTMLImageElement> {
+export function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    const url = URL.createObjectURL(blob);
-    img.onload = () => {
-      resolve(img);
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
-    };
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("img-load"));
     img.src = url;
   });
@@ -100,10 +89,13 @@ function loadVideo(url: string, muted: boolean): Promise<HTMLVideoElement> {
   });
 }
 
-/** object-fit:cover + object-position(focus) + transform:scale(zoom) — identično editoru. */
+// ---------------- crtanje ----------------
+
+type Media = HTMLImageElement | HTMLVideoElement;
+
 function drawMediaCover(
   ctx: CanvasRenderingContext2D,
-  src: CanvasImageSource & { width?: number; height?: number },
+  src: Media,
   W: number,
   H: number,
   zoom = 1,
@@ -111,8 +103,8 @@ function drawMediaCover(
   offX = 0,
 ) {
   const el = src as HTMLVideoElement & HTMLImageElement;
-  const sw = el.videoWidth || el.naturalWidth || (src as HTMLImageElement).width || W;
-  const sh = el.videoHeight || el.naturalHeight || (src as HTMLImageElement).height || H;
+  const sw = el.videoWidth || el.naturalWidth || W;
+  const sh = el.videoHeight || el.naturalHeight || H;
   if (!sw || !sh) return;
   const sr = sw / sh;
   const cr = W / H;
@@ -138,51 +130,209 @@ function drawMediaCover(
   ctx.drawImage(src, dx, dy, dw, dh);
 }
 
-async function fetchAsBlob(url: string): Promise<Blob> {
-  const r = await fetch(url, { mode: "cors" });
-  if (!r.ok) throw new Error("fetch-failed");
-  return r.blob();
-}
-
-// -------- snimanje slika (PNG / overlay) --------
-
-async function nodeToBlob(node: HTMLElement, pixelRatio: number, fontEmbedCSS?: string): Promise<Blob> {
-  const opts = { pixelRatio, cacheBust: true, fontEmbedCSS, quality: 1 } as const;
-  let blob = await toBlob(node, opts);
-  if (!blob) blob = await toBlob(node, opts); // iOS Safari: prvi frame zna biti prazan
-  if (!blob) throw new Error("capture-failed");
-  return blob;
-}
-
-/** Snimi niz DOM čvorova u PNG blobove na traženoj rezoluciji (~1080px širine). */
-export async function captureNodes(
-  nodes: HTMLElement[],
-  pixelRatio: number,
-  onStep?: (done: number, total: number) => void,
-): Promise<(Blob | null)[]> {
-  const fontEmbedCSS = nodes[0] ? await getFontEmbedCSS(nodes[0]).catch(() => undefined) : undefined;
-  if (nodes[0]) await toBlob(nodes[0], { pixelRatio: 0.3, fontEmbedCSS, cacheBust: true }).catch(() => null);
-  const blobs: (Blob | null)[] = [];
-  for (let i = 0; i < nodes.length; i++) {
-    try {
-      blobs.push(await nodeToBlob(nodes[i], pixelRatio, fontEmbedCSS));
-    } catch {
-      blobs.push(null); // jedan neuspeh ne ruši ceo izvoz
-    }
-    onStep?.(i + 1, nodes.length);
+const famCache = new Map<string, string>();
+function resolveFamily(css: string): string {
+  const hit = famCache.get(css);
+  if (hit) return hit;
+  let fam = css;
+  try {
+    const el = document.createElement("span");
+    el.style.position = "absolute";
+    el.style.visibility = "hidden";
+    el.style.fontFamily = css;
+    document.body.appendChild(el);
+    fam = getComputedStyle(el).fontFamily || css;
+    el.remove();
+  } catch {
+    /* keep css */
   }
-  return blobs;
+  famCache.set(css, fam);
+  return fam;
 }
 
-export async function zipMixed(
-  items: { name: string; blob: Blob }[],
-): Promise<Blob> {
+function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const out: string[] = [];
+  for (const para of (text || "").split("\n")) {
+    const words = para.split(" ");
+    let line = "";
+    for (const w of words) {
+      const test = line ? line + " " + w : w;
+      if (ctx.measureText(test).width > maxWidth && line) {
+        out.push(line);
+        line = w;
+      } else {
+        line = test;
+      }
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+function drawTextLayer(ctx: CanvasRenderingContext2D, t: Slide["texts"][number], W: number, H: number, scale: number) {
+  const fs = Math.max(6, t.size * scale);
+  ctx.font = `${t.bold ? 700 : 500} ${fs}px ${resolveFamily(fontCss(t.font))}`;
+  try {
+    (ctx as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = `${0.2 * scale}px`;
+  } catch {
+    /* ignore */
+  }
+  const maxW = 0.82 * W;
+  const lines = wrapLines(ctx, t.content, maxW);
+  const lineH = fs * 1.16;
+  const widths = lines.map((l) => ctx.measureText(l).width);
+  const blockW = Math.min(maxW, Math.max(1, ...widths));
+  const ax = (t.pos.x / 100) * W;
+  const ay = (t.pos.y / 100) * H;
+  ctx.textBaseline = "top";
+  ctx.fillStyle = t.color;
+  ctx.shadowColor = "rgba(42,32,51,0.5)";
+  ctx.shadowBlur = 16 * scale;
+  ctx.shadowOffsetY = 2 * scale;
+  lines.forEach((ln, i) => {
+    const lw = widths[i];
+    let lx = ax;
+    if (t.align === "center") lx = ax + (blockW - lw) / 2;
+    else if (t.align === "right") lx = ax + (blockW - lw);
+    ctx.fillText(ln, lx, ay + (lineH - fs) / 2 + i * lineH);
+  });
+  ctx.shadowColor = "transparent";
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+  try {
+    (ctx as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = "0px";
+  } catch {
+    /* ignore */
+  }
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.min(r, h / 2, w / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function drawCta(ctx: CanvasRenderingContext2D, slide: Slide, W: number, H: number, scale: number) {
+  const fs = 15 * scale;
+  const padX = 22 * scale;
+  const padY = 12 * scale;
+  const gap = 8 * scale;
+  const arrowW = fs * 0.85;
+  ctx.font = `700 ${fs}px ${resolveFamily("var(--font-body), system-ui, sans-serif")}`;
+  const text = slide.ctaText || "Naruči";
+  const tw = ctx.measureText(text).width;
+  const w = padX * 2 + tw + gap + arrowW;
+  const h = fs + padY * 2;
+  const x = (slide.ctaPos.x / 100) * W;
+  const y = (slide.ctaPos.y / 100) * H;
+
+  let bg = "#B58A3C";
+  let fg = "#52295F";
+  let border: string | null = null;
+  if (slide.ctaStyle === "cta-solid") {
+    bg = "#63347A";
+    fg = "#ffffff";
+  } else if (slide.ctaStyle === "cta-outline") {
+    bg = "rgba(255,255,255,0.14)";
+    fg = "#ffffff";
+    border = "#ffffff";
+  }
+
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.4)";
+  ctx.shadowBlur = 22 * scale;
+  ctx.shadowOffsetY = 8 * scale;
+  roundRect(ctx, x, y, w, h, h / 2);
+  ctx.fillStyle = bg;
+  ctx.fill();
+  ctx.restore();
+  if (border) {
+    roundRect(ctx, x + 0.8 * scale, y + 0.8 * scale, w - 1.6 * scale, h - 1.6 * scale, h / 2);
+    ctx.lineWidth = 1.6 * scale;
+    ctx.strokeStyle = border;
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = fg;
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, x + padX, y + h / 2 + 1 * scale);
+  // strelica →
+  const axx = x + padX + tw + gap;
+  const cy = y + h / 2;
+  ctx.strokeStyle = fg;
+  ctx.lineWidth = Math.max(1.5, 2 * scale);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(axx, cy);
+  ctx.lineTo(axx + arrowW, cy);
+  ctx.moveTo(axx + arrowW - fs * 0.28, cy - fs * 0.26);
+  ctx.lineTo(axx + arrowW, cy);
+  ctx.lineTo(axx + arrowW - fs * 0.28, cy + fs * 0.26);
+  ctx.stroke();
+}
+
+/** Nacrtaj ceo slajd (pozadina + zatamnjenje + tekstovi + CTA) na dati ctx. */
+function drawSlideArt(
+  ctx: CanvasRenderingContext2D,
+  slide: Slide,
+  media: Media | null,
+  W: number,
+  H: number,
+  scale: number,
+) {
+  if (media) {
+    drawMediaCover(ctx, media, W, H, slide.zoom, slide.focus);
+  } else {
+    ctx.fillStyle = "#F1E9F4";
+    ctx.fillRect(0, 0, W, H);
+  }
+  if (slide.scrim > 0) {
+    const a = slide.scrim / 100;
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, `rgba(42,32,51,${0.28 * a})`);
+    g.addColorStop(0.32, "rgba(42,32,51,0)");
+    g.addColorStop(0.6, "rgba(42,32,51,0)");
+    g.addColorStop(1, `rgba(42,32,51,${0.42 * a})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+  for (const t of slide.texts) drawTextLayer(ctx, t, W, H, scale);
+  if (slide.cta) drawCta(ctx, slide, W, H, scale);
+}
+
+// ---------------- slika → PNG ----------------
+
+function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob-null"))), "image/png");
+  });
+}
+
+export async function renderSlidePng(slide: Slide, media: Media | null, W: number, H: number, scale: number): Promise<Blob> {
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("no-2d");
+  drawSlideArt(ctx, slide, media, W, H, scale);
+  return canvasToBlob(canvas);
+}
+
+// ---------------- ZIP ----------------
+
+export async function zipMixed(items: { name: string; blob: Blob }[]): Promise<Blob> {
   const zip = new JSZip();
   items.forEach((it) => zip.file(it.name, it.blob));
   return zip.generateAsync({ type: "blob" });
 }
 
-// -------- video kodek --------
+// ---------------- video kodek ----------------
 
 function pickMime(): { mime: string; ext: "mp4" | "webm" } | null {
   const MR = (globalThis as unknown as { MediaRecorder?: typeof MediaRecorder }).MediaRecorder;
@@ -238,34 +388,18 @@ async function tryVideoAudioTracks(video: HTMLVideoElement): Promise<MediaStream
   }
 }
 
-/**
- * Jedan VIDEO slajd → video fajl sa uklopljenim tekstom/CTA/scrim-om.
- * Ako slajd nema nikakav overlay, prosledi se originalni fajl (najbolji kvalitet + zvuk).
- */
-export async function exportVideoSlide(opts: {
+// ---------------- video slajd → MP4 ----------------
+
+export async function exportSlideVideo(opts: {
+  slide: Slide;
   url: string;
-  overlayBlob: Blob | null; // transparentni sloj (scrim+tekst+cta) ili null ako nema
-  hasOverlay: boolean;
   W: number;
   H: number;
-  zoom: number;
-  focus: { x: number; y: number };
+  scale: number;
   capSec?: number;
   onProgress?: (p: number) => void;
 }): Promise<{ blob: Blob; ext: string }> {
-  const { url, overlayBlob, hasOverlay, W, H, zoom, focus, capSec = 60, onProgress } = opts;
-
-  // bez overlaya → prosledi original (čuva zvuk i kvalitet)
-  if (!hasOverlay) {
-    try {
-      const blob = await fetchAsBlob(url);
-      const m = url.match(/\.(mp4|mov|webm|m4v)(\?|#|$)/i);
-      return { blob, ext: (m?.[1] || "mp4").toLowerCase() };
-    } catch {
-      /* padni na re-encode ispod */
-    }
-  }
-
+  const { slide, url, W, H, scale, capSec = 60, onProgress } = opts;
   const pick = pickMime();
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -273,9 +407,6 @@ export async function exportVideoSlide(opts: {
   const ctx = canvas.getContext("2d");
   if (!ctx || !pick || !videoSupported()) throw new Error("video-unsupported");
 
-  const overlay = overlayBlob ? await loadImageFromBlob(overlayBlob) : null;
-
-  // probaj sa zvukom (nemutovano); ako play() padne → mutovano (bez zvuka)
   let video: HTMLVideoElement;
   let audioTracks: MediaStreamTrack[] = [];
   try {
@@ -293,11 +424,7 @@ export async function exportVideoSlide(opts: {
   const { rec, finished } = makeRecorder(canvas, audioTracks, pick.mime);
   const dur = Math.min(capSec, video.duration || capSec);
 
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, W, H);
-  drawMediaCover(ctx, video, W, H, zoom, focus);
-  if (overlay) ctx.drawImage(overlay, 0, 0, W, H);
-
+  drawSlideArt(ctx, slide, video, W, H, scale);
   await video.play().catch(() => {});
   rec.start(250);
   const t0 = performance.now();
@@ -308,10 +435,7 @@ export async function exportVideoSlide(opts: {
         resolve();
         return;
       }
-      ctx.fillStyle = "#000";
-      ctx.fillRect(0, 0, W, H);
-      drawMediaCover(ctx, video, W, H, zoom, focus);
-      if (overlay) ctx.drawImage(overlay, 0, 0, W, H);
+      drawSlideArt(ctx, slide, video, W, H, scale);
       onProgress?.(el / dur);
       requestAnimationFrame(frame);
     };
@@ -331,24 +455,24 @@ export async function exportVideoSlide(opts: {
   return { blob, ext: pick.ext };
 }
 
-// -------- Reels: montaža (slike + video, spojeno u jedan klip) --------
+// ---------------- Reels montaža ----------------
 
-export interface ReelsSegment {
-  kind: "still" | "video";
-  imgBlob?: Blob; // still: gotov PNG (bg+overlay); video: transparentni overlay
-  url?: string; // video: izvor
-  zoom?: number;
-  focus?: { x: number; y: number };
+export interface ReelsItem {
+  slide: Slide;
+  kind: "image" | "video";
+  imgEl?: HTMLImageElement | null; // za sliku
+  url?: string; // za video
 }
 
 export async function exportReelsMontage(
-  segments: ReelsSegment[],
+  items: ReelsItem[],
+  W: number,
+  H: number,
+  scale: number,
   transition: "none" | "fade" | "slide",
   onProgress?: (p: number) => void,
 ): Promise<{ blob: Blob; ext: string }> {
   const pick = pickMime();
-  const W = 1080;
-  const H = 1920;
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -356,45 +480,47 @@ export async function exportReelsMontage(
   if (!ctx || !pick || !videoSupported()) throw new Error("video-unsupported");
 
   const STILL_MS = 2400;
-  const TRANS = 520;
+  const TRANS = 500;
   const CAP = 20;
 
-  // pripremi resurse
-  type Prepared =
-    | { kind: "still"; img: HTMLImageElement; ms: number }
-    | { kind: "video"; video: HTMLVideoElement; overlay: HTMLImageElement | null; dur: number; zoom: number; focus: { x: number; y: number } };
-  const prepared: Prepared[] = [];
-  for (const s of segments) {
-    if (s.kind === "still" && s.imgBlob) {
-      prepared.push({ kind: "still", img: await loadImageFromBlob(s.imgBlob), ms: STILL_MS });
-    } else if (s.kind === "video" && s.url) {
-      const video = await loadVideo(s.url, true); // montaža bez zvuka (muzika se dodaje u IG-u)
-      const overlay = s.imgBlob ? await loadImageFromBlob(s.imgBlob) : null;
-      prepared.push({
-        kind: "video",
-        video,
-        overlay,
-        dur: Math.min(CAP, video.duration || 4),
-        zoom: s.zoom ?? 1,
-        focus: s.focus ?? { x: 50, y: 50 },
-      });
+  type Prep =
+    | { kind: "image"; el: HTMLImageElement | null; slide: Slide; ms: number }
+    | { kind: "video"; video: HTMLVideoElement; slide: Slide; dur: number };
+  const prepared: Prep[] = [];
+  for (const it of items) {
+    if (it.kind === "video" && it.url) {
+      const video = await loadVideo(it.url, true);
+      prepared.push({ kind: "video", video, slide: it.slide, dur: Math.min(CAP, video.duration || 4) });
+    } else {
+      prepared.push({ kind: "image", el: it.imgEl ?? null, slide: it.slide, ms: STILL_MS });
     }
   }
   if (prepared.length === 0) throw new Error("no-segments");
 
-  const totalMs = prepared.reduce((a, p) => a + (p.kind === "still" ? p.ms : p.dur * 1000), 0);
+  const totalMs = prepared.reduce((a, p) => a + (p.kind === "image" ? p.ms : p.dur * 1000), 0);
   const { rec, finished } = makeRecorder(canvas, [], pick.mime);
+
+  // pomoćni offscreen za crtanje statične slike-slajda (radi prelaza)
+  function renderStill(p: { el: HTMLImageElement | null; slide: Slide }): HTMLCanvasElement {
+    const c = document.createElement("canvas");
+    c.width = W;
+    c.height = H;
+    const cx = c.getContext("2d")!;
+    drawSlideArt(cx, p.slide, p.el, W, H, scale);
+    return c;
+  }
 
   rec.start(250);
   let elapsedBefore = 0;
-  let prevStill: HTMLImageElement | null = null;
+  let prevStill: HTMLCanvasElement | null = null;
 
   for (const p of prepared) {
-    if (p.kind === "still") {
+    if (p.kind === "image") {
+      const still = renderStill(p);
       const from = prevStill;
       await new Promise<void>((resolve) => {
         const t0 = performance.now();
-        const frame = () => {
+        const step = () => {
           const el = performance.now() - t0;
           if (el >= p.ms) {
             resolve();
@@ -402,47 +528,46 @@ export async function exportReelsMontage(
           }
           if (from && transition !== "none" && el < TRANS) {
             const pr = el / TRANS;
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, W, H);
             if (transition === "slide") {
-              drawMediaCover(ctx, from, W, H, 1, { x: 50, y: 50 }, -W * pr);
-              drawMediaCover(ctx, p.img, W, H, 1, { x: 50, y: 50 }, W - W * pr);
+              ctx.drawImage(from, -W * pr, 0);
+              ctx.drawImage(still, W - W * pr, 0);
             } else {
-              drawMediaCover(ctx, from, W, H);
+              ctx.drawImage(from, 0, 0);
               ctx.globalAlpha = pr;
-              drawMediaCover(ctx, p.img, W, H);
+              ctx.drawImage(still, 0, 0);
               ctx.globalAlpha = 1;
             }
           } else {
-            drawMediaCover(ctx, p.img, W, H);
+            ctx.drawImage(still, 0, 0);
           }
           onProgress?.((elapsedBefore + el) / totalMs);
-          requestAnimationFrame(frame);
+          requestAnimationFrame(step);
         };
-        requestAnimationFrame(frame);
+        requestAnimationFrame(step);
       });
-      prevStill = p.img;
+      prevStill = still;
       elapsedBefore += p.ms;
     } else {
       p.video.currentTime = 0;
       await p.video.play().catch(() => {});
       await new Promise<void>((resolve) => {
         const t0 = performance.now();
-        const frame = () => {
+        const step = () => {
           const el = (performance.now() - t0) / 1000;
           if (el >= p.dur || p.video.ended) {
             resolve();
             return;
           }
-          ctx.fillStyle = "#000";
-          ctx.fillRect(0, 0, W, H);
-          drawMediaCover(ctx, p.video, W, H, p.zoom, p.focus);
-          if (p.overlay) ctx.drawImage(p.overlay, 0, 0, W, H);
+          drawSlideArt(ctx, p.slide, p.video, W, H, scale);
           onProgress?.((elapsedBefore + el * 1000) / totalMs);
-          requestAnimationFrame(frame);
+          requestAnimationFrame(step);
         };
-        requestAnimationFrame(frame);
+        requestAnimationFrame(step);
       });
       p.video.pause();
-      prevStill = null; // tvrdi rez posle videa
+      prevStill = null;
       elapsedBefore += p.dur * 1000;
     }
   }
@@ -459,3 +584,6 @@ export async function exportReelsMontage(
   if (blob.size < 1000) throw new Error("video-empty");
   return { blob, ext: pick.ext };
 }
+
+// zadržano zbog kompatibilnosti tipa u pozivaocu (project se ne koristi ovde)
+export type { Project };

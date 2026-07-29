@@ -23,18 +23,18 @@ import {
   bumpAiCalls,
 } from "@/lib/settings";
 import * as I from "./icons";
-import { ExportStage } from "./ExportStage";
 import {
-  captureNodes,
   zipMixed,
   downloadBlob,
   safeFileName,
+  loadImage,
+  renderSlidePng,
+  exportSlideVideo,
   exportReelsMontage,
-  exportVideoSlide,
   videoSupported,
   isVideoUrl,
   toCaptureUrl,
-  type ReelsSegment,
+  type ReelsItem,
 } from "@/lib/exporter";
 import { logEvent, getLog, subscribeLog, clearLog, formatWhen, type LogEntry } from "@/lib/logbook";
 
@@ -112,16 +112,10 @@ export default function Studio() {
   const [novaTopic, setNovaTopic] = useState("Torta od malina, nova ove nedelje");
   const [novaCaps, setNovaCaps] = useState<{ kicker: string; text: string }[]>([]);
   const [novaCapIdx, setNovaCapIdx] = useState(0);
-  const [exportJob, setExportJob] = useState<null | {
-    items: { slide: Slide; video: boolean; src: string | null }[];
-    project: Project;
-    width: number;
-  }>(null);
   const [exportUI, setExportUI] = useState<null | { pct: number; label: string; error?: boolean }>(null);
   const [vidPlaying, setVidPlaying] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
   const bgVideoRef = useRef<HTMLVideoElement>(null);
-  const exportRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -303,26 +297,7 @@ export default function Studio() {
     else showToast(res.demo ? "Sačuvano (demo režim)" : "Sačuvano");
   }
 
-  // sačekaj da se sve slike u čvoru učitaju
-  function waitForImages(root: HTMLElement): Promise<void> {
-    const imgs = Array.from(root.querySelectorAll("img"));
-    return Promise.all(
-      imgs.map((img) =>
-        img.complete && img.naturalWidth
-          ? Promise.resolve()
-          : new Promise<void>((res) => {
-              img.onload = () => res();
-              img.onerror = () => res();
-            }),
-      ),
-    ).then(() => undefined);
-  }
-
-  // ---- stvarni izvoz: svestan tipa medija po svakom slajdu ----
-  function slideHasOverlay(s: Slide): boolean {
-    return s.texts.length > 0 || s.cta || s.scrim > 0;
-  }
-
+  // ---- stvarni izvoz: sve se crta direktno na canvasu (pouzdano na iOS-u) ----
   async function runExport() {
     if (!project || exportUI) return;
     const proj = project;
@@ -343,7 +318,9 @@ export default function Studio() {
     // izmeri trenutno platno da izvoz bude 1:1 sa onim što se vidi
     const rect = canvasRef.current?.getBoundingClientRect();
     const width = Math.round(rect?.width || 440);
-    const pixelRatio = fmt.w / width; // ciljano ~1080px širine
+    const W = fmt.w;
+    const H = fmt.h;
+    const scale = W / width; // font/CTA veličine su relativne na platno
 
     setExportUI({ pct: 0, label: isReels || hasVideo ? "Spremam…" : "Spremam slike…" });
 
@@ -358,21 +335,19 @@ export default function Studio() {
       if (safe && safe.startsWith("blob:")) objectUrls.push(safe);
     }
     if (loadFails > 0) {
-      logEvent("warn", "Neke slike se nisu učitale za izvoz", `${loadFails} ${loadFails === 1 ? "medij nije uspeo" : "medija nije uspelo"} da se pripremi — možda internet ili medij nije dostupan. Pokušavam i dalje.`);
+      logEvent("warn", "Neki mediji se nisu učitali za izvoz", `${loadFails} ${loadFails === 1 ? "medij nije uspeo" : "medija nije uspelo"} da se pripremi — možda internet ili medij nije dostupan. Pokušavam i dalje.`);
     }
 
-    setExportJob({ items, project: proj, width });
-
-    // sačekaj dva frejma da se off-screen render iscrta
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-    const container = exportRef.current;
-    if (!container) {
-      setExportUI(null);
-      setExportJob(null);
-      return;
+    // učitaj slike u memoriju (za crtanje)
+    async function imgFor(src: string | null): Promise<HTMLImageElement | null> {
+      if (!src) return null;
+      try {
+        return await loadImage(src);
+      } catch {
+        return null;
+      }
     }
-    const nodes = Array.from(container.querySelectorAll<HTMLElement>(".export-board"));
-    await waitForImages(container);
+
     if (typeof document !== "undefined" && document.fonts?.ready) {
       try {
         await document.fonts.ready;
@@ -383,52 +358,37 @@ export default function Studio() {
 
     const base = safeFileName(proj.name);
     try {
-      // snimi sve čvorove: slika-slajd → gotov PNG; video-slajd → transparentni overlay
-      const capBlobs = await captureNodes(nodes, pixelRatio, (done, total) =>
-        setExportUI({ pct: Math.round((done / total) * (isReels || hasVideo ? 30 : 100)), label: `Spremam kadrove… ${done}/${total}` }),
-      );
-
-      const capOk = capBlobs.filter(Boolean).length;
-      if (capOk === 0) {
-        throw new Error("nijedan-kadar");
-      }
-      logEvent("info", "Slike pripremljene", `Spremno ${capOk}/${capBlobs.length}.`);
-
       if (isReels) {
         // montaža: slike stoje, video slajdovi se puštaju — jedan .mp4
         let ok = false;
         if (videoSupported()) {
           try {
-            setExportUI({ pct: 35, label: "Snimam video…" });
-            const segments: ReelsSegment[] = items.map((it, i) =>
-              it.video
-                ? {
-                    kind: "video",
-                    url: (it.src || mediaUrl(it.slide.mediaId))!,
-                    imgBlob: slideHasOverlay(it.slide) ? capBlobs[i] ?? undefined : undefined,
-                    zoom: it.slide.zoom,
-                    focus: it.slide.focus,
-                  }
-                : { kind: "still", imgBlob: capBlobs[i] ?? undefined },
-            );
-            const { blob, ext } = await exportReelsMontage(segments, proj.transition, (p) =>
-              setExportUI({ pct: 35 + Math.round(p * 60), label: "Snimam video…" }),
+            setExportUI({ pct: 20, label: "Snimam video…" });
+            const ritems: ReelsItem[] = [];
+            for (const it of items) {
+              if (it.video) ritems.push({ slide: it.slide, kind: "video", url: (it.src || mediaUrl(it.slide.mediaId))! });
+              else ritems.push({ slide: it.slide, kind: "image", imgEl: await imgFor(it.src) });
+            }
+            const { blob, ext } = await exportReelsMontage(ritems, W, H, scale, proj.transition, (p) =>
+              setExportUI({ pct: 20 + Math.round(p * 75), label: "Snimam video…" }),
             );
             downloadBlob(blob, `${base}.${ext}`);
             setExportUI({ pct: 100, label: `Reels spreman ✦ (.${ext})` });
             logEvent("ok", `Reels izvezen — ${base}.${ext}`, "Video je preuzet na uređaj.");
             ok = true;
           } catch (e) {
-            logEvent("warn", "Snimanje videa nije uspelo", "Umesto videa sačuvao sam pojedinačne kadrove (slike) u .zip-u.");
+            logEvent("warn", "Snimanje videa nije uspelo", "Umesto videa čuvam pojedinačne kadrove (slike) u .zip-u.");
             console.warn("reels montage fallback", e);
           }
         } else {
           logEvent("warn", "Ovaj pregledač ne podržava snimanje videa", "Umesto videa čuvam kadrove kao slike.");
         }
         if (!ok) {
-          const frames = capBlobs
-            .map((b, i) => (b ? { name: `${base}-${i + 1}.png`, blob: b } : null))
-            .filter((x): x is { name: string; blob: Blob } => !!x);
+          const frames: { name: string; blob: Blob }[] = [];
+          for (let i = 0; i < items.length; i++) {
+            const im = await imgFor(items[i].src);
+            frames.push({ name: `${base}-${i + 1}.png`, blob: await renderSlidePng(items[i].slide, im, W, H, scale) });
+          }
           const zip = await zipMixed(frames);
           downloadBlob(zip, `${base}-reels-kadrovi.zip`);
           setExportUI({ pct: 100, label: "Video nije podržan — sačuvani kadrovi (.zip)." });
@@ -441,35 +401,45 @@ export default function Studio() {
           const it = items[i];
           const nm = items.length === 1 ? base : `${base}-${i + 1}`;
           if (!it.video) {
-            if (capBlobs[i]) outputs.push({ name: `${nm}.png`, blob: capBlobs[i]! });
-            else logEvent("warn", `Slajd ${i + 1} preskočen`, "Sliku nije bilo moguće pripremiti za izvoz.");
-          } else {
-            setExportUI({ pct: 30 + Math.round((i / items.length) * 60), label: `Snimam video ${i + 1}/${items.length}…` });
+            setExportUI({ pct: Math.round((i / items.length) * 90), label: `Spremam sliku ${i + 1}/${items.length}…` });
+            const im = await imgFor(it.src);
             try {
-              const { blob, ext } = await exportVideoSlide({
+              outputs.push({ name: `${nm}.png`, blob: await renderSlidePng(it.slide, im, W, H, scale) });
+            } catch (e) {
+              console.warn("render slide fail", e);
+              logEvent("warn", `Slajd ${i + 1} preskočen`, "Sliku nije bilo moguće pripremiti.");
+            }
+          } else {
+            setExportUI({ pct: Math.round((i / items.length) * 90), label: `Snimam video ${i + 1}/${items.length}…` });
+            try {
+              const { blob, ext } = await exportSlideVideo({
+                slide: it.slide,
                 url: (it.src || mediaUrl(it.slide.mediaId))!,
-                overlayBlob: slideHasOverlay(it.slide) ? capBlobs[i] : null,
-                hasOverlay: slideHasOverlay(it.slide),
-                W: fmt.w,
-                H: fmt.h,
-                zoom: it.slide.zoom,
-                focus: it.slide.focus,
+                W,
+                H,
+                scale,
                 onProgress: (p) =>
-                  setExportUI({ pct: 30 + Math.round(((i + p) / items.length) * 60), label: `Snimam video ${i + 1}/${items.length}…` }),
+                  setExportUI({ pct: Math.round(((i + p) / items.length) * 90), label: `Snimam video ${i + 1}/${items.length}…` }),
               });
               outputs.push({ name: `${nm}.${ext}`, blob });
             } catch (e) {
               console.warn("video slide fallback → original", e);
-              // fallback: prosledi originalni video fajl (bez uklopljenog teksta)
+              // fallback 1: originalni video fajl (bez uklopljenog teksta)
               try {
                 const url = (it.src || mediaUrl(it.slide.mediaId))!;
-                const r = await fetch(url, { mode: "cors" });
+                const r = await fetch(url);
                 const blob = await r.blob();
                 const m = mediaUrl(it.slide.mediaId)?.match(/\.(mp4|mov|webm|m4v)(\?|#|$)/i);
                 outputs.push({ name: `${nm}.${(m?.[1] || "mp4").toLowerCase()}`, blob });
                 logEvent("warn", `Tekst nije uklopljen na video (slajd ${i + 1})`, "Sačuvao sam originalni video bez teksta preko njega.");
               } catch {
-                if (capBlobs[i]) outputs.push({ name: `${nm}.png`, blob: capBlobs[i]! });
+                // fallback 2: bar poster kao slika
+                try {
+                  const im = await imgFor(it.src);
+                  outputs.push({ name: `${nm}.png`, blob: await renderSlidePng(it.slide, im, W, H, scale) });
+                } catch {
+                  /* preskoči */
+                }
               }
             }
           }
@@ -487,7 +457,7 @@ export default function Studio() {
           const nImg = outputs.filter((o) => o.name.endsWith(".png")).length;
           const nVid = outputs.length - nImg;
           setExportUI({ pct: 100, label: `${nImg} slika${nVid ? ` + ${nVid} video` : ""} u .zip ✦` });
-          logEvent("ok", `Izvezeno — ${base}.zip`, `${nImg} ${nImg === 1 ? "slika" : "slika"}${nVid ? ` + ${nVid} video` : ""}, numerisano po redu. Preuzeto na uređaj.`);
+          logEvent("ok", `Izvezeno — ${base}.zip`, `${nImg} slika${nVid ? ` + ${nVid} video` : ""}, numerisano po redu. Preuzeto na uređaj.`);
         }
       }
       persistProject({ ...proj, updatedAt: new Date().toISOString() }).catch(() => {});
@@ -495,8 +465,8 @@ export default function Studio() {
       console.error("export", err);
       const msg = err instanceof Error ? err.message : String(err);
       const friendly =
-        msg === "nijedan-kadar" || msg === "nema-izlaza"
-          ? "Nisam uspeo da pripremim nijednu sliku — proveri da li se medij vidi na platnu i da imaš internet."
+        msg === "nema-izlaza"
+          ? "Nisam uspeo da pripremim nijedan fajl — proveri da li se medij vidi na platnu i da imaš internet."
           : "Nešto je zapelo pri izvozu. Proveri internet i pokušaj ponovo.";
       setExportUI({ pct: 100, label: "Izvoz nije uspeo. Pokušaj ponovo.", error: true });
       logEvent("error", "Izvoz nije uspeo", `${friendly} (tehnički: ${msg})`);
@@ -508,7 +478,6 @@ export default function Studio() {
           /* ignore */
         }
       });
-      setExportJob(null);
       setTimeout(() => setExportUI(null), 2800);
     }
   }
@@ -2350,36 +2319,6 @@ export default function Studio() {
       <div className={`toast${toast ? " on" : ""}`}>
         <I.Check /> <span>{toast}</span>
       </div>
-
-      {/* Skriveni render slajdova za izvoz (1:1 sa platnom) */}
-      {exportJob && (
-        <div
-          ref={exportRef}
-          aria-hidden
-          style={{
-            position: "fixed",
-            left: -100000,
-            top: 0,
-            width: 4000,
-            display: "flex",
-            flexDirection: "column",
-            gap: 40,
-            pointerEvents: "none",
-            zIndex: -1,
-          }}
-        >
-          {exportJob.items.map((it) => (
-            <ExportStage
-              key={it.slide.id}
-              project={exportJob.project}
-              slide={it.slide}
-              width={exportJob.width}
-              overlayOnly={it.video}
-              srcOverride={it.src}
-            />
-          ))}
-        </div>
-      )}
 
       {/* Progress preklop tokom izvoza */}
       {exportUI && (
