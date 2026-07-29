@@ -67,8 +67,8 @@ function extractJson(text: string): unknown {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-async function callGemini(key: string, sys: string, user: string): Promise<unknown> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(
+async function callGemini(key: string, model: string, sys: string, user: string): Promise<unknown> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
     key,
   )}`;
   const res = await fetch(url, {
@@ -80,10 +80,14 @@ async function callGemini(key: string, sys: string, user: string): Promise<unkno
       generationConfig: { maxOutputTokens: 900, temperature: 0.8, responseMimeType: "application/json" },
     }),
   });
-  if (!res.ok) throw new Error(`gemini ${res.status}`);
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`${res.status} ${t.slice(0, 220)}`);
+  }
   const data = await res.json();
   const text: string =
     data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "";
+  if (!text) throw new Error(`prazan odgovor: ${JSON.stringify(data).slice(0, 220)}`);
   return extractJson(text);
 }
 
@@ -117,12 +121,28 @@ export async function POST(req: Request) {
   // demo dok nijedan ključ nije podešen
   if (!geminiKey && !anthropicKey) return Response.json(demo(body));
 
+  const user = prompt(body);
+
+  if (geminiKey) {
+    const models = [GEMINI_MODEL, "gemini-2.0-flash", "gemini-flash-latest", "gemini-1.5-flash"].filter(
+      (m, i, a) => a.indexOf(m) === i,
+    );
+    let lastErr = "";
+    for (const m of models) {
+      try {
+        return Response.json(await callGemini(geminiKey, m, BRAND, user));
+      } catch (e) {
+        lastErr = `[${m}] ${(e as Error).message || String(e)}`;
+      }
+    }
+    console.error("Gemini error", lastErr);
+    return Response.json({ error: "ai_failed", detail: lastErr.slice(0, 300) }, { status: 502 });
+  }
+
   try {
-    const user = prompt(body);
-    const out = geminiKey ? await callGemini(geminiKey, BRAND, user) : await callClaude(anthropicKey!, BRAND, user);
-    return Response.json(out);
+    return Response.json(await callClaude(anthropicKey!, BRAND, user));
   } catch (e) {
-    console.error("AI error", e);
-    return Response.json({ error: "ai_failed" }, { status: 502 });
+    console.error("Claude error", e);
+    return Response.json({ error: "ai_failed", detail: (e as Error).message?.slice(0, 300) }, { status: 502 });
   }
 }
