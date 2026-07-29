@@ -34,6 +34,9 @@ function normalizeSlide(s: Partial<Slide>): Slide {
     ...s,
     zoom: s.zoom ?? base.zoom,
     focus: s.focus ?? base.focus,
+    font: s.font ?? base.font,
+    showTitle: s.showTitle ?? base.showTitle,
+    showSub: s.showSub ?? base.showSub,
     pos: s.pos ?? base.pos,
   } as Slide;
 }

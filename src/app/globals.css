@@ -304,6 +304,18 @@ textarea.txt-in{min-height:64px;line-height:1.4}
   color:var(--plum);font-weight:600;font-size:12.5px;padding:0 10px;cursor:pointer;font-family:inherit}
 .mini-select:focus{outline:none;border-color:var(--plum-300)}
 
+/* safe zone overlay */
+.safezone{position:absolute;border:2px dashed rgba(255,255,255,.92);border-radius:6px;
+  box-shadow:0 0 0 9999px rgba(74,53,102,.34);pointer-events:none;z-index:6}
+.safezone-tag{position:absolute;top:-11px;left:8px;background:var(--gold);color:var(--plum-700);
+  font-size:10px;font-weight:800;letter-spacing:.4px;padding:2px 7px;border-radius:6px;text-transform:uppercase}
+
+/* label + inline switch */
+.label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.switch.sm{width:40px;height:23px}
+.switch.sm i{width:17px;height:17px}
+.switch.sm.on i{left:20px}
+
 /* delete na dashboard kartici */
 .card-del{position:absolute;top:11px;right:11px;width:30px;height:30px;border-radius:50%;
   background:rgba(42,32,51,.55);color:#fff;display:grid;place-items:center;backdrop-filter:blur(6px);

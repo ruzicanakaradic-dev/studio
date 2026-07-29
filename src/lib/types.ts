@@ -21,7 +21,29 @@ export interface Slide {
   scrim: number;
   zoom: number; // 1..3 — uvećanje slike
   focus: Pos; // 0..100 — kadriranje (object-position)
+  font: string; // ključ iz FONTS — font naslova
+  showTitle: boolean;
+  showSub: boolean;
   pos: { text: Pos; cta: Pos };
+}
+
+export interface FontOption {
+  key: string;
+  label: string;
+  css: string;
+}
+
+export const FONTS: FontOption[] = [
+  { key: "fraunces", label: "Fraunces", css: "var(--font-fraunces), Georgia, serif" },
+  { key: "playfair", label: "Playfair", css: "var(--font-playfair), Georgia, serif" },
+  { key: "lora", label: "Lora", css: "var(--font-lora), Georgia, serif" },
+  { key: "poppins", label: "Poppins", css: "var(--font-poppins), system-ui, sans-serif" },
+  { key: "inter", label: "Inter", css: "var(--font-inter), system-ui, sans-serif" },
+  { key: "dancing", label: "Rukopis", css: "var(--font-dancing), cursive" },
+];
+
+export function fontCss(key: string): string {
+  return (FONTS.find((f) => f.key === key) ?? FONTS[0]).css;
 }
 
 export type Transition = "none" | "fade" | "slide";
@@ -55,6 +77,13 @@ export const TEXT_COLORS = [
   "#2A2033",
 ];
 
+export interface SafeInset {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+} // udeo (0..1) po ivici koji treba držati čistim
+
 export interface FormatMeta {
   label: string;
   short: string;
@@ -65,11 +94,12 @@ export interface FormatMeta {
   h: number; // preporučena visina (px)
   slideLabel: string;
   platform: string;
+  safe: SafeInset;
 }
 
 export const FORMAT_META: Record<Format, FormatMeta> = {
-  post: { label: "Objava · 4:5", short: "Objava", ratio: "4 / 5", story: false, multi: false, w: 1080, h: 1350, slideLabel: "Strana", platform: "Instagram" },
-  story: { label: "Story · 9:16", short: "Story", ratio: "9 / 16", story: true, multi: true, w: 1080, h: 1920, slideLabel: "Strana", platform: "IG + TikTok" },
-  reels: { label: "Reels · 9:16", short: "Reels", ratio: "9 / 16", story: false, multi: true, w: 1080, h: 1920, slideLabel: "Klip", platform: "IG + TikTok" },
-  carousel: { label: "Carousel · 4:5", short: "Carousel", ratio: "4 / 5", story: false, multi: true, w: 1080, h: 1350, slideLabel: "Slajd", platform: "IG + TikTok" },
+  post: { label: "Objava · 4:5", short: "Objava", ratio: "4 / 5", story: false, multi: false, w: 1080, h: 1350, slideLabel: "Strana", platform: "Instagram", safe: { top: 0.05, bottom: 0.08, left: 0.05, right: 0.05 } },
+  story: { label: "Story · 9:16", short: "Story", ratio: "9 / 16", story: true, multi: true, w: 1080, h: 1920, slideLabel: "Strana", platform: "IG + TikTok", safe: { top: 0.12, bottom: 0.14, left: 0.05, right: 0.06 } },
+  reels: { label: "Reels · 9:16", short: "Reels", ratio: "9 / 16", story: false, multi: true, w: 1080, h: 1920, slideLabel: "Klip", platform: "IG + TikTok", safe: { top: 0.1, bottom: 0.25, left: 0.05, right: 0.13 } },
+  carousel: { label: "Carousel · 4:5", short: "Carousel", ratio: "4 / 5", story: false, multi: true, w: 1080, h: 1350, slideLabel: "Slajd", platform: "IG + TikTok", safe: { top: 0.05, bottom: 0.08, left: 0.05, right: 0.05 } },
 };

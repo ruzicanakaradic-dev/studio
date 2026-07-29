@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Align, CtaStyle, Format, MediaItem, Project, Slide } from "@/lib/types";
-import { FORMAT_META, TEXT_COLORS } from "@/lib/types";
+import { FORMAT_META, TEXT_COLORS, FONTS, fontCss } from "@/lib/types";
 import { newProject, freshSlide, mediaUrl } from "@/lib/samples";
 import { fetchProjects, fetchMedia, persistProject, uploadMedia, deleteProject } from "@/lib/store";
 import * as I from "./icons";
@@ -42,6 +42,7 @@ export default function Studio() {
   const [toast, setToast] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [animKey, setAnimKey] = useState(0);
+  const [safeZone, setSafeZone] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -587,15 +588,19 @@ export default function Studio() {
                           }}
                           onPointerDown={(e) => startDrag("text", e)}
                         >
-                          {slide.title && (
+                          {slide.showTitle && slide.title && (
                             <div
                               className="ov-title"
-                              style={{ fontSize: slide.titleSize, color: slide.color }}
+                              style={{
+                                fontSize: slide.titleSize,
+                                color: slide.color,
+                                fontFamily: fontCss(slide.font),
+                              }}
                             >
                               {slide.title}
                             </div>
                           )}
-                          {slide.sub && (
+                          {slide.showSub && slide.sub && (
                             <div
                               className="ov-sub"
                               style={{
@@ -608,6 +613,19 @@ export default function Studio() {
                           )}
                         </div>
 
+                        {safeZone && (
+                          <div
+                            className="safezone"
+                            style={{
+                              left: `${fmt.safe.left * 100}%`,
+                              top: `${fmt.safe.top * 100}%`,
+                              right: `${fmt.safe.right * 100}%`,
+                              bottom: `${fmt.safe.bottom * 100}%`,
+                            }}
+                          >
+                            <span className="safezone-tag">Safe zone</span>
+                          </div>
+                        )}
                         {slide.cta && (
                           <div
                             key={`ovc-${animKey}`}
@@ -708,22 +726,61 @@ export default function Studio() {
                   {propTab === "text" && (
                     <>
                       <div className="field">
-                        <label>Naslov</label>
-                        <textarea
-                          className="txt-in"
-                          rows={2}
-                          value={slide.title}
-                          onChange={(e) => patchSlide({ title: e.target.value })}
-                        />
+                        <div className="label-row">
+                          <label style={{ margin: 0 }}>Naslov</label>
+                          <button
+                            className={`switch sm${slide.showTitle ? " on" : ""}`}
+                            onClick={() => patchSlide({ showTitle: !slide.showTitle })}
+                            title="Prikaži / sakrij naslov"
+                          >
+                            <i />
+                          </button>
+                        </div>
+                        {slide.showTitle && (
+                          <textarea
+                            className="txt-in"
+                            rows={2}
+                            value={slide.title}
+                            onChange={(e) => patchSlide({ title: e.target.value })}
+                          />
+                        )}
                       </div>
+                      {slide.showTitle && (
+                        <div className="field">
+                          <label>Font naslova</label>
+                          <select
+                            className="mini-select"
+                            style={{ width: "100%", height: 42 }}
+                            value={slide.font}
+                            onChange={(e) => patchSlide({ font: e.target.value })}
+                          >
+                            {FONTS.map((f) => (
+                              <option key={f.key} value={f.key}>
+                                {f.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                       <div className="field">
-                        <label>Podnaslov</label>
-                        <textarea
-                          className="txt-in"
-                          rows={2}
-                          value={slide.sub}
-                          onChange={(e) => patchSlide({ sub: e.target.value })}
-                        />
+                        <div className="label-row">
+                          <label style={{ margin: 0 }}>Tekst (podnaslov)</label>
+                          <button
+                            className={`switch sm${slide.showSub ? " on" : ""}`}
+                            onClick={() => patchSlide({ showSub: !slide.showSub })}
+                            title="Prikaži / sakrij tekst"
+                          >
+                            <i />
+                          </button>
+                        </div>
+                        {slide.showSub && (
+                          <textarea
+                            className="txt-in"
+                            rows={2}
+                            value={slide.sub}
+                            onChange={(e) => patchSlide({ sub: e.target.value })}
+                          />
+                        )}
                       </div>
                       <div className="divide" />
                       <div className="field">
@@ -788,8 +845,18 @@ export default function Studio() {
                           <option value="fade">Pretapanje (fade)</option>
                           <option value="rise">Iskakanje (rise)</option>
                         </select>
-                        <button className="chip" style={{ marginTop: 12 }} onClick={playPreview}>
-                          <I.Play style={{ width: 12, height: 12, marginRight: 5 }} /> Pregledaj animaciju
+                        <button
+                          className="chip"
+                          style={{
+                            marginTop: 12,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            whiteSpace: "nowrap",
+                          }}
+                          onClick={playPreview}
+                        >
+                          <I.Play style={{ width: 12, height: 12 }} /> Pregledaj animaciju
                         </button>
                       </div>
                     </>
@@ -894,6 +961,23 @@ export default function Studio() {
                         </div>
                         <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.5 }}>
                           Tamniji preliv pomaže da tekst bude čitljiv preko slike.
+                        </p>
+                      </div>
+                      <div className="divide" />
+                      <div className="field">
+                        <label>Safe zone (bezbedna zona)</label>
+                        <div className="toggle-row">
+                          <b style={{ fontWeight: 500, fontSize: 13.5 }}>Prikaži bezbednu zonu</b>
+                          <button
+                            className={`switch${safeZone ? " on" : ""}`}
+                            onClick={() => setSafeZone((v) => !v)}
+                          >
+                            <i />
+                          </button>
+                        </div>
+                        <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.5 }}>
+                          Drži naslov i CTA unutar isprekidane linije — van nje interfejs Instagrama /
+                          TikToka (nalog, opis, dugmad) prekriva sadržaj.
                         </p>
                       </div>
                       <div className="divide" />
