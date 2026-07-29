@@ -60,7 +60,7 @@ function relTime(iso: string): string {
 }
 
 export default function Studio() {
-  const [view, setView] = useState<"studio" | "objave" | "brend" | "ai" | "editor">("studio");
+  const [view, setView] = useState<"studio" | "objave" | "nova" | "brend" | "ai" | "editor">("studio");
   const [projects, setProjects] = useState<Project[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [mediaType, setMediaType] = useState<"image" | "video">("image");
@@ -85,6 +85,11 @@ export default function Studio() {
   const [brand, setBrand] = useState<BrandProfile>(DEFAULT_BRAND);
   const [aiSet, setAiSet] = useState<AiSettings>(DEFAULT_AI);
   const [aiTest, setAiTest] = useState<string | null>(null);
+  const [novaFmt, setNovaFmt] = useState<Format>("post");
+  const [novaPhotos, setNovaPhotos] = useState<string[]>([]);
+  const [novaTopic, setNovaTopic] = useState("Torta od malina, nova ove nedelje");
+  const [novaCaps, setNovaCaps] = useState<{ kicker: string; text: string }[]>([]);
+  const [novaCapIdx, setNovaCapIdx] = useState(0);
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -193,15 +198,42 @@ export default function Studio() {
   }
   function onNav(k: string) {
     if (k === "nova") {
-      setNewOpen(true);
+      setView("nova");
       return;
     }
     if (k === "platno") {
       if (project) setView("editor");
-      else setNewOpen(true);
+      else setView("nova");
       return;
     }
-    setView(k as "studio" | "objave" | "brend" | "ai");
+    setView(k as "studio" | "objave" | "brend" | "ai" | "nova");
+  }
+  function togglePhoto(id: string) {
+    setNovaPhotos((ps) => (ps.includes(id) ? ps.filter((x) => x !== id) : [...ps, id]));
+  }
+  async function doNovaCaptions() {
+    const d = await askAI("captions3", { idea: novaTopic, format: FORMAT_META[novaFmt].short });
+    if (d?.options) {
+      setNovaCaps(d.options);
+      setNovaCapIdx(0);
+    }
+  }
+  function novaToEditor() {
+    const title = (novaTopic.split(",")[0] || "Nova objava").trim();
+    const photos = novaPhotos.length ? novaPhotos : [null];
+    const p = newProject(novaFmt, title);
+    p.slides = photos.map((ph, i) => {
+      const s = freshSlide(ph);
+      if (i === 0) {
+        s.texts = [
+          freshText({ content: "Novo ove nedelje", font: "archivo", size: 14, pos: { x: 8, y: 76 } }),
+          freshText({ content: title, font: brand.headingFont, size: 34, pos: { x: 8, y: 81 } }),
+        ];
+      }
+      return s;
+    });
+    if (novaCaps[novaCapIdx]) p.slides[0].cta = false;
+    openEditor(p);
   }
   async function save(exported = false) {
     if (!project) return;
@@ -522,7 +554,7 @@ export default function Studio() {
                   </h1>
                   <p className="page-sub">Petak je — vikend traži kolače.</p>
                 </div>
-                <button className="btn btn-primary btn-cta" onClick={() => setNewOpen(true)}>
+                <button className="btn btn-primary btn-cta" onClick={() => setView("nova")}>
                   Nova objava <I.Arrow />
                 </button>
               </div>
@@ -540,7 +572,7 @@ export default function Studio() {
                         već predloženi — treba ti 30 sekundi snimka.
                       </p>
                       <div className="ai-band-actions">
-                        <button className="btn btn-outline" onClick={() => setNewOpen(true)}>
+                        <button className="btn btn-outline" onClick={() => setView("nova")}>
                           Otvori predlog
                         </button>
                         <button className="btn btn-text" onClick={() => setAiBandOff(true)}>
@@ -595,7 +627,7 @@ export default function Studio() {
                   <h1 className="page-title">Objave</h1>
                   <p className="page-sub">Sve tvoje objave na jednom mestu.</p>
                 </div>
-                <button className="btn btn-primary btn-cta" onClick={() => setNewOpen(true)}>
+                <button className="btn btn-primary btn-cta" onClick={() => setView("nova")}>
                   Nova objava <I.Arrow />
                 </button>
               </div>
@@ -912,6 +944,100 @@ export default function Studio() {
                   Tvoje fotografije se ne koriste za obučavanje modela.
                 </p>
               </aside>
+            </div>
+          )}
+
+          {/* ---------- NOVA OBJAVA ---------- */}
+          {view === "nova" && (
+            <div className="nova">
+              <div className="nova-top">
+                <h1 className="page-title" style={{ fontSize: 24 }}>
+                  Nova objava
+                </h1>
+                <div className="nova-top-r">
+                  <div className="mini-fmt">
+                    {FMT_ORDER.map((k) => (
+                      <button key={k} className={novaFmt === k ? "on" : ""} onClick={() => setNovaFmt(k)}>
+                        {FORMAT_META[k].short}
+                      </button>
+                    ))}
+                  </div>
+                  <button className="btn btn-outline" onClick={novaToEditor}>
+                    Doradi na platnu
+                  </button>
+                  <button className="btn btn-primary" onClick={() => showToast("Objava — Instagram povezivanje je sledeći korak")}>
+                    Objavi
+                  </button>
+                </div>
+              </div>
+
+              <div className="nova-cols">
+                <div className="nova-photos">
+                  <div className="mono-label">Fotke · izabrano {novaPhotos.length}</div>
+                  <div className="np-grid">
+                    {media
+                      .filter((m) => m.kind === "image")
+                      .map((m) => {
+                        const idx = novaPhotos.indexOf(m.id);
+                        return (
+                          <button key={m.id} className={`np-tile${idx >= 0 ? " on" : ""}`} onClick={() => togglePhoto(m.id)}>
+                            <img src={m.url} alt="" />
+                            {idx >= 0 && <span className="np-badge">{idx + 1}</span>}
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+
+                <div className="nova-preview">
+                  <div className="preview-post" style={{ width: "100%", maxWidth: 360 }}>
+                    <div
+                      className="preview-photo"
+                      style={{ backgroundImage: mediaUrl(novaPhotos[0]) ? `url(${mediaUrl(novaPhotos[0])})` : undefined }}
+                    >
+                      <div className="preview-overlay">
+                        <span className="gold-kicker">Novo ove nedelje</span>
+                        <div className="preview-title serif">{(novaTopic.split(",")[0] || "Nova objava").trim()}</div>
+                      </div>
+                    </div>
+                    <div className="preview-cap">
+                      <b>ruzini_domaci_kolaci</b>
+                      <p>{novaCaps[novaCapIdx]?.text || "Klikni „Neka AI napiše” za opis objave."}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="nova-text">
+                  <div className="mono-label" style={{ marginBottom: 10 }}>
+                    Tekst
+                  </div>
+                  <input
+                    className="txt-in"
+                    value={novaTopic}
+                    onChange={(e) => setNovaTopic(e.target.value)}
+                    placeholder="npr. torta od malina, naručuje se do petka"
+                  />
+                  <button className="btn btn-primary" style={{ width: "100%", marginTop: 12 }} disabled={!!aiBusy} onClick={doNovaCaptions}>
+                    <I.Sparkle /> {aiBusy === "captions3" ? "AI piše…" : "Neka AI napiše"}
+                  </button>
+                  {aiMsg && (
+                    <p className="hint" style={{ marginTop: 12 }}>
+                      <I.Info /> {aiMsg}
+                    </p>
+                  )}
+                  <div className="cap-list">
+                    {novaCaps.map((c, i) => (
+                      <button key={i} className={`cap-card${i === novaCapIdx ? " on" : ""}`} onClick={() => setNovaCapIdx(i)}>
+                        <span className="radio-dot" />
+                        <span>
+                          <span className="mono-label">{c.kicker}</span>
+                          <p>{c.text}</p>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

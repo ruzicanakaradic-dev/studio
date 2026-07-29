@@ -27,7 +27,7 @@ function lengthHint(ai?: AiInput): string {
 }
 
 type Body = {
-  mode: "suggest" | "caption" | "improve" | "layout" | "test";
+  mode: "suggest" | "caption" | "improve" | "layout" | "test" | "captions3";
   idea?: string;
   format?: string;
   tone?: string;
@@ -53,6 +53,10 @@ Zadrži isti jezik (srpski, latinica). Vrati JSON: {"content": "poboljšan tekst
     case "test":
       return `Napiši kratak probni caption za objavu domaćih kolača, u tvom tonu. ${lengthHint(b.ai)}
 Vrati JSON: {"content": "tekst objave"}.`;
+    case "captions3":
+      return `Napiši TRI verzije opisa (caption) za Instagram/TikTok ${fmt} na temu: "${b.idea || "domaći kolači"}". ${lengthHint(b.ai)}
+Tri stila: 1) kratko i jasno, 2) toplo sa malom ličnom pričom, 3) sa pozivom na akciju (naruči).
+Vrati JSON: {"options":[{"kicker":"KRATKO","text":"..."},{"kicker":"TOPLO","text":"..."},{"kicker":"SA POZIVOM","text":"..."}], "hashtags":[${b.ai?.hashtags === false ? "" : '"#hashtag", ... 6-10 relevantnih'}]}.`;
     case "layout":
       return `Za ${fmt} (vertikalni format), rasporedi ove tekstualne slojeve po platnu radi lepe kompozicije i čitljivosti.
 Slojevi (redom): ${JSON.stringify(b.texts || [])}.
@@ -75,6 +79,16 @@ function demo(b: Body) {
       return { content: (b.text || "") + " ✨", demo: true };
     case "test":
       return { content: "Sveže pečeni sitni kolači, tanka korica i mnogo krema. Naruči do petka 🍰", demo: true };
+    case "captions3":
+      return {
+        options: [
+          { kicker: "KRATKO", text: "Malina, pavlaka, tanka korica. Naručuje se do petka." },
+          { kicker: "TOPLO", text: "Ova torta je nastala jer je Milica tražila nešto „ne previše slatko\". Ostala je na meniju." },
+          { kicker: "SA POZIVOM", text: "Torta od malina — pečemo je subotom. Piši nam do petka i čeka te." },
+        ],
+        hashtags: ["#domaćikolači", "#tortaodmalina", "#novisad", "#poručikolač", "#subota"],
+        demo: true,
+      };
     case "layout":
       return {
         layout: (b.texts || []).map((_, i) => ({ x: 8, y: 24 + i * 16, size: i === 0 ? 40 : 22, align: "left" })),

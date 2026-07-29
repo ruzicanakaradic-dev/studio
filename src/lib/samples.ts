@@ -2,6 +2,13 @@ import type { MediaItem, Project, Slide, Format } from "./types";
 
 // Seed media — bundled sample assets (kolači). In production these come from Supabase Storage.
 export const SAMPLE_MEDIA: MediaItem[] = [
+  { id: "cake-1", name: "Torta krem", url: "/samples/cake-1.jpg", kind: "image" },
+  { id: "cake-2", name: "Čoko torta", url: "/samples/cake-2.jpg", kind: "image" },
+  { id: "cake-3", name: "Torta sa voćem", url: "/samples/cake-3.jpg", kind: "image" },
+  { id: "tray-1", name: "Poslužavnik 1", url: "/samples/tray-1.jpg", kind: "image" },
+  { id: "tray-2", name: "Poslužavnik 2", url: "/samples/tray-2.jpg", kind: "image" },
+  { id: "tray-3", name: "Poslužavnik 3", url: "/samples/tray-3.jpg", kind: "image" },
+  { id: "tray-4", name: "Poslužavnik 4", url: "/samples/tray-4.jpg", kind: "image" },
   { id: "kolaci-1", name: "Sitni kolači", url: "/samples/kolaci-1.jpg", kind: "image" },
   { id: "kolaci-2", name: "Platna sa kolačima", url: "/samples/kolaci-2.jpg", kind: "image" },
   { id: "video-torta", name: "Torta — rotacija", url: "/samples/video-torta.jpg", kind: "video" },
