@@ -1353,6 +1353,10 @@ export default function Studio() {
                         </button>
                       </div>
                       <div className="media-grid">
+                        <button className="upload-tile" onClick={() => fileRef.current?.click()}>
+                          <I.Upload />
+                          Otpremi svoju
+                        </button>
                         {media
                           .filter((m) => m.kind === mediaType)
                           .map((m) => (
@@ -1365,10 +1369,6 @@ export default function Studio() {
                               )}
                             </button>
                           ))}
-                        <button className="upload-tile" onClick={() => fileRef.current?.click()}>
-                          <I.Upload />
-                          Otpremi svoju
-                        </button>
                       </div>
                       <input ref={fileRef} type="file" accept="image/*,video/*" hidden onChange={onUpload} />
                       <div className="divide" />

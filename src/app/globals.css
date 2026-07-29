@@ -544,5 +544,5 @@ textarea.txt-in{min-height:64px;line-height:1.4}
   opacity:0;transition:.15s;z-index:2}
 .card-del svg{width:15px;height:15px}
 .card-del:hover{background:#B4453E}
-.card:hover .card-del{opacity:1}
+.card:hover .card-del,.post-tile:hover .card-del{opacity:1}
 @media(max-width:860px){ .card-del{opacity:1;background:rgba(42,32,51,.62)} }
