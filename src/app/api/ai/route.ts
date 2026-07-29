@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 
 type BrandInput = { toneChips?: string[]; toneText?: string; bannedWords?: string[] };
 type AiInput = { textLength?: string; emoji?: string; hashtags?: boolean };
@@ -162,7 +162,7 @@ export async function POST(req: Request) {
   const sys = buildSystem(body.brand);
 
   if (geminiKey) {
-    const models = [GEMINI_MODEL, "gemini-2.0-flash", "gemini-flash-latest", "gemini-1.5-flash"].filter(
+    const models = [GEMINI_MODEL, "gemini-3-flash-preview", "gemini-2.0-flash"].filter(
       (m, i, a) => a.indexOf(m) === i,
     );
     const tried: string[] = [];
@@ -175,7 +175,12 @@ export async function POST(req: Request) {
       }
     }
     console.error("Gemini error", tried.join(" | "));
-    return Response.json({ error: "ai_failed", detail: tried.join(" | ").slice(0, 400) }, { status: 502 });
+    const joined = tried.join(" | ");
+    const quota = /429|quota|RESOURCE_EXHAUSTED/i.test(joined);
+    const detail = quota
+      ? "Dostignut besplatni limit (15 zahteva/min ili dnevna kvota). Sačekaj minut pa probaj ponovo."
+      : joined.slice(0, 400);
+    return Response.json({ error: "ai_failed", detail, quota }, { status: 502 });
   }
 
   try {
