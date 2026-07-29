@@ -15,6 +15,24 @@ const FMT_ICON: Record<Format, React.FC<React.SVGProps<SVGSVGElement>>> = {
 };
 const FMT_ORDER: Format[] = ["post", "story", "reels", "carousel"];
 
+const NAV = [
+  { key: "studio", label: "Studio", note: "početna", icon: I.Grid },
+  { key: "nova", label: "Nova objava", note: "vodič", icon: I.Plus },
+  { key: "platno", label: "Platno", note: "editor", icon: I.ImgIcon },
+  { key: "brend", label: "Brend", note: "logo, boje, fontovi", icon: I.Brand },
+  { key: "ai", label: "AI", note: "podešavanja", icon: I.Sparkle },
+] as const;
+
+const WEEK: { day: string; title: string; status?: string; plum?: boolean }[] = [
+  { day: "PON", title: "Slobodno" },
+  { day: "UTO", title: "Krofne — novo", status: "ZAKAZANO" },
+  { day: "SRE", title: "Citat mušterije", status: "PREDLOG", plum: true },
+  { day: "ČET", title: "Slobodno" },
+  { day: "PET", title: "Torta od malina", status: "PREDLOG", plum: true },
+  { day: "SUB", title: "Vitrina u 8h", status: "PREDLOG", plum: true },
+  { day: "NED", title: "Pakovanje 30 s", status: "PREDLOG", plum: true },
+];
+
 function relTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const h = Math.floor(diff / 3.6e6);
@@ -28,7 +46,7 @@ function relTime(iso: string): string {
 }
 
 export default function Studio() {
-  const [view, setView] = useState<"dash" | "editor">("dash");
+  const [view, setView] = useState<"studio" | "objave" | "brend" | "ai" | "editor">("studio");
   const [projects, setProjects] = useState<Project[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [mediaType, setMediaType] = useState<"image" | "video">("image");
@@ -43,6 +61,7 @@ export default function Studio() {
   const [previewing, setPreviewing] = useState(false);
   const [animKey, setAnimKey] = useState(0);
   const [safeZone, setSafeZone] = useState(false);
+  const [aiBandOff, setAiBandOff] = useState(false);
   const [aiIdea, setAiIdea] = useState("");
   const [aiTone, setAiTone] = useState("Toplo i primamljivo");
   const [aiBusy, setAiBusy] = useState<string | null>(null);
@@ -133,6 +152,18 @@ export default function Studio() {
   function createProject(format: Format) {
     setNewOpen(false);
     openEditor(newProject(format));
+  }
+  function onNav(k: string) {
+    if (k === "nova") {
+      setNewOpen(true);
+      return;
+    }
+    if (k === "platno") {
+      if (project) setView("editor");
+      else setNewOpen(true);
+      return;
+    }
+    setView(k as "studio" | "objave" | "brend" | "ai");
   }
   async function save(exported = false) {
     if (!project) return;
@@ -397,142 +428,181 @@ export default function Studio() {
 
   return (
     <div className="app">
-      {/* ===== TOP BAR ===== */}
-      <header className="topbar">
-        <button className="brand" onClick={() => setView("dash")}>
-          <span className="logo-mark" aria-hidden>
-            <img src="/brand/logo.png" alt="Ružini domaći kolači" />
-          </span>
-          <span className="brand-txt">
-            <b>Ružini domaći kolači</b>
-            <span>Studio</span>
-          </span>
-        </button>
-        <div className="topbar-spacer" />
-
-        {view === "dash" ? (
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <button className="btn btn-ghost desktop-only" onClick={() => setNewOpen(true)}>
-              Predlošci
-            </button>
-            <button className="btn btn-primary" onClick={() => setNewOpen(true)}>
-              <I.Plus /> Novi projekat
-            </button>
-            <span className="avatar" title="Ružica">
-              R
+      {/* ===== SHELL: sidebar + main ===== */}
+      <div className="shell">
+        <aside className="sidebar2">
+          <div className="side-brand">
+            <span className="logo-mark" aria-hidden>
+              <img src="/brand/logo.png" alt="Ružini domaći kolači" />
+            </span>
+            <span className="brand-txt">
+              <b>Ružini domaći kolači</b>
+              <span>Studio</span>
             </span>
           </div>
-        ) : (
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <button className="btn btn-ghost desktop-only" onClick={() => save(false)}>
-              Sačuvaj nacrt
-            </button>
-            <button className="btn btn-gold" onClick={() => save(true)}>
-              <I.Export /> Izvezi
-            </button>
+          <nav className="side-nav">
+            {NAV.map((n) => {
+              const Ico = n.icon;
+              const active = view === n.key || (n.key === "platno" && view === "editor");
+              return (
+                <button key={n.key} className={`nav2${active ? " on" : ""}`} onClick={() => onNav(n.key)}>
+                  <Ico />
+                  <span className="nav2-txt">
+                    <b>{n.label}</b>
+                    <i>{n.note}</i>
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+          <div className="side-user">
+            <span className="avatar">R</span>
+            <span className="nav2-txt">
+              <b>Ružica</b>
+              <i>2 SARADNIKA</i>
+            </span>
           </div>
-        )}
-      </header>
+        </aside>
 
-      {/* ===== DASHBOARD ===== */}
-      {view === "dash" && (
-        <section className="view">
-          <div className="dash">
-            <aside className="sidebar">
-              <div className="side-label">Studio</div>
-              <button className="nav-item on">
-                <I.Grid /> Projekti
-              </button>
-              <button className="nav-item" onClick={() => setNewOpen(true)}>
-                <I.Eye /> Predlošci
-              </button>
-              <button className="nav-item">
-                <I.Brand /> Brend
-              </button>
-              <button className="nav-item">
-                <I.ImgIcon /> Mediji
-              </button>
-              <div className="side-foot">
-                <b>Instagram Studio</b>
-                <p>Kreiraj post, story, reels i carousel — brzo, iz jednog mesta.</p>
-                <button className="btn btn-gold" style={{ width: "100%" }} onClick={() => setNewOpen(true)}>
-                  Započni
+        <main className="shell-main">
+          {/* ---------- STUDIO HOME ---------- */}
+          {view === "studio" && (
+            <div className="screen-scroll home">
+              <div className="home-head">
+                <div>
+                  <h1 className="page-title">
+                    Zdravo, Ružica <span style={{ fontFamily: "var(--font-body)" }}>👋</span>
+                  </h1>
+                  <p className="page-sub">Petak je — vikend traži kolače.</p>
+                </div>
+                <button className="btn btn-primary btn-cta" onClick={() => setNewOpen(true)}>
+                  Nova objava <I.Arrow />
                 </button>
               </div>
-            </aside>
 
-            <main className="dash-main">
-              <h1 className="hello">
-                Zdravo, Ružica <span style={{ fontFamily: "var(--font-inter)" }}>👋</span>
-              </h1>
-              <p className="sub">Nastavi gde si stala ili napravi novu objavu za Instagram.</p>
+              <div className="home-grid">
+                {!aiBandOff && (
+                  <div className="ai-band">
+                    <div className="ai-band-photo" style={{ backgroundImage: "url(/samples/tray-1.jpg)" }}>
+                      <span className="pill-plum">AI predlog za danas</span>
+                    </div>
+                    <div className="ai-band-body">
+                      <h2 className="serif">Reels: pakovanje narudžbine za vikend</h2>
+                      <p>
+                        Reelsi sa pakovanjem imaju 2× više pregleda od fotografija. Tekst i muzika su
+                        već predloženi — treba ti 30 sekundi snimka.
+                      </p>
+                      <div className="ai-band-actions">
+                        <button className="btn btn-outline" onClick={() => setNewOpen(true)}>
+                          Otvori predlog
+                        </button>
+                        <button className="btn btn-text" onClick={() => setAiBandOff(true)}>
+                          Ne danas
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-              <div className="row-head">
-                <h2>Tvoji projekti</h2>
-                <div className="seg">
-                  {(["all", "post", "story", "reels"] as const).map((f) => (
-                    <button key={f} className={filter === f ? "on" : ""} onClick={() => setFilter(f)}>
-                      {f === "all" ? "Svi" : FORMAT_META[f].short}
-                    </button>
+                <div className="week-card">
+                  <div className="mono-label">Nedelja</div>
+                  {WEEK.map((w) => (
+                    <div className="week-row" key={w.day}>
+                      <span className="week-day">{w.day}</span>
+                      <span className="week-title">{w.title}</span>
+                      {w.status && <span className={`week-status ${w.plum ? "plum" : ""}`}>{w.status}</span>}
+                    </div>
                   ))}
                 </div>
               </div>
 
-              <div className="grid">
-                <button className="card new-card" onClick={() => setNewOpen(true)}>
-                  <span className="plus">
-                    <I.Plus />
-                  </span>
-                  <b className="serif">Novi projekat</b>
-                  <span>Post · Story · Reels · Carousel</span>
-                </button>
-
-                {filtered.map((p) => {
-                  const Ico = FMT_ICON[p.format];
+              <div className="mono-label" style={{ marginTop: 30 }}>
+                Poslednje objave
+              </div>
+              <div className="posts-grid">
+                {projects.map((p) => {
                   const url = mediaUrl(p.coverMediaId);
+                  const Ico = FMT_ICON[p.format];
                   return (
-                    <div
-                      key={p.id}
-                      className="card"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => openEditor(p)}
-                      onKeyDown={(e) => e.key === "Enter" && openEditor(p)}
-                    >
-                      <div className="card-thumb">
-                        <span className="badge">
-                          <Ico /> {FORMAT_META[p.format].short}
-                        </span>
-                        <button
-                          className="card-del"
-                          title="Obriši projekat"
-                          onClick={(e) => removeProject(e, p.id, p.name)}
-                        >
-                          <I.Trash />
-                        </button>
-                        {url && <img src={url} alt="" />}
-                      </div>
-                      <div className="card-body">
-                        <h3>{p.name}</h3>
-                        <p>Izmenjeno {relTime(p.updatedAt)}</p>
-                      </div>
+                    <div key={p.id} className="post-tile" role="button" tabIndex={0} onClick={() => openEditor(p)}>
+                      {url && <img src={url} alt="" />}
+                      <span className="post-badge">
+                        <Ico /> {FORMAT_META[p.format].short}
+                      </span>
+                      <button className="card-del" title="Obriši" onClick={(e) => removeProject(e, p.id, p.name)}>
+                        <I.Trash />
+                      </button>
+                      <span className="post-name">{p.name}</span>
                     </div>
                   );
                 })}
               </div>
-            </main>
-          </div>
-        </section>
-      )}
+            </div>
+          )}
+
+          {/* ---------- OBJAVE ---------- */}
+          {view === "objave" && (
+            <div className="screen-scroll home">
+              <div className="home-head">
+                <div>
+                  <h1 className="page-title">Objave</h1>
+                  <p className="page-sub">Sve tvoje objave na jednom mestu.</p>
+                </div>
+                <button className="btn btn-primary btn-cta" onClick={() => setNewOpen(true)}>
+                  Nova objava <I.Arrow />
+                </button>
+              </div>
+              <div className="posts-grid two">
+                {projects.map((p) => {
+                  const url = mediaUrl(p.coverMediaId);
+                  const Ico = FMT_ICON[p.format];
+                  return (
+                    <div key={p.id} className="post-tile" role="button" tabIndex={0} onClick={() => openEditor(p)}>
+                      {url && <img src={url} alt="" />}
+                      <span className="post-badge">
+                        <Ico /> {FORMAT_META[p.format].short}
+                      </span>
+                      <button className="card-del" title="Obriši" onClick={(e) => removeProject(e, p.id, p.name)}>
+                        <I.Trash />
+                      </button>
+                      <span className="post-name">{p.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ---------- BREND / AI (stižu sledeće) ---------- */}
+          {(view === "brend" || view === "ai") && (
+            <div className="screen-scroll home">
+              <div className="home-head">
+                <div>
+                  <h1 className="page-title">{view === "brend" ? "Brend" : "AI podešavanja"}</h1>
+                  <p className="page-sub">
+                    {view === "brend"
+                      ? "Logo, boje, fontovi, ton glasa i hashtag setovi."
+                      : "Ti odlučuješ koliko AI radi sam. Ništa ne ide na Instagram bez tvoje potvrde."}
+                  </p>
+                </div>
+              </div>
+              <div className="wip-card">
+                <I.Sparkle />
+                <b className="serif">Ovaj ekran stiže sledeći</b>
+                <p>Radim ekrane po redu iz dizajna. Ovaj je sledeći na redu — javljam čim bude gotov.</p>
+              </div>
+            </div>
+          )}
 
       {/* ===== EDITOR ===== */}
       {view === "editor" && project && slide && fmt && (
         <section className="view">
           <div className="editor">
             <div className="ed-bar">
-              <button className="icon-btn" title="Nazad" onClick={() => setView("dash")}>
+              <button className="icon-btn" title="Nazad" onClick={() => setView("studio")}>
                 <I.Back />
               </button>
+              <span className="ed-kicker serif">Platno ·</span>
               <input
                 className="ed-name"
                 value={project.name}
@@ -547,6 +617,12 @@ export default function Studio() {
                 {fmt.label}
               </span>
               <div className="topbar-spacer" />
+              <button className="btn btn-ghost desktop-only" onClick={() => save(false)}>
+                Sačuvaj nacrt
+              </button>
+              <button className="btn btn-primary" onClick={() => save(true)}>
+                <I.Export /> Izvezi
+              </button>
             </div>
 
             <div className="ed-body">
@@ -1245,6 +1321,24 @@ export default function Studio() {
             </nav>
           </div>
         </section>
+      )}
+        </main>
+      </div>
+
+      {/* ===== MOBILE BOTTOM TABS (van editora) ===== */}
+      {view !== "editor" && (
+        <nav className="btabs">
+          {NAV.map((n) => {
+            const Ico = n.icon;
+            const active = view === n.key;
+            return (
+              <button key={n.key} className={active ? "on" : ""} onClick={() => onNav(n.key)}>
+                <Ico />
+                {n.label}
+              </button>
+            );
+          })}
+        </nav>
       )}
 
       {/* ===== NEW PROJECT MODAL ===== */}

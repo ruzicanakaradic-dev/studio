@@ -38,19 +38,27 @@ export interface FontOption {
 }
 
 export const FONTS: FontOption[] = [
+  // serif / display
   { key: "playfair", label: "Playfair Display", css: "var(--font-playfair), Georgia, serif" },
   { key: "cormorant", label: "Cormorant", css: "var(--font-cormorant), Georgia, serif" },
   { key: "lora", label: "Lora", css: "var(--font-lora), Georgia, serif" },
+  { key: "fraunces", label: "Fraunces", css: "var(--font-fraunces), Georgia, serif" },
+  { key: "ebgaramond", label: "EB Garamond", css: "var(--font-ebgaramond), Georgia, serif" },
+  { key: "dmserif", label: "DM Serif", css: "var(--font-dmserif), Georgia, serif" },
+  { key: "marcellus", label: "Marcellus", css: "var(--font-marcellus), Georgia, serif" },
+  // sans
   { key: "archivo", label: "Archivo", css: "var(--font-archivo), system-ui, sans-serif" },
   { key: "karla", label: "Karla", css: "var(--font-karla), system-ui, sans-serif" },
+  { key: "inter", label: "Inter", css: "var(--font-inter), system-ui, sans-serif" },
+  { key: "worksans", label: "Work Sans", css: "var(--font-worksans), system-ui, sans-serif" },
+  { key: "nunito", label: "Nunito", css: "var(--font-nunito), system-ui, sans-serif" },
+  // rukopis
+  { key: "dancing", label: "Rukopis", css: "var(--font-dancing), cursive" },
 ];
 
-// mapiranje starih font ključeva na nove (kompatibilnost sa ranije sačuvanim projektima)
+// mapiranje uklonjenih starih ključeva (kompatibilnost sa ranije sačuvanim projektima)
 const FONT_ALIAS: Record<string, string> = {
-  fraunces: "playfair",
-  inter: "archivo",
   poppins: "archivo",
-  dancing: "cormorant",
 };
 
 export function fontCss(key: string): string {

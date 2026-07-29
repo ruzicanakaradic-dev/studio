@@ -1,5 +1,19 @@
 import type { Metadata, Viewport } from "next";
-import { Playfair_Display, Archivo, Cormorant_Garamond, Lora, Karla } from "next/font/google";
+import {
+  Playfair_Display,
+  Archivo,
+  Cormorant_Garamond,
+  Lora,
+  Karla,
+  Fraunces,
+  EB_Garamond,
+  DM_Serif_Display,
+  Marcellus,
+  Inter,
+  Work_Sans,
+  Nunito,
+  Dancing_Script,
+} from "next/font/google";
 import "./globals.css";
 
 const archivo = Archivo({
@@ -32,6 +46,14 @@ const karla = Karla({
   display: "swap",
   weight: ["400", "500", "600", "700", "800"],
 });
+const fraunces = Fraunces({ subsets: ["latin", "latin-ext"], variable: "--font-fraunces", display: "swap", weight: ["400", "500", "600", "700"] });
+const ebgaramond = EB_Garamond({ subsets: ["latin", "latin-ext"], variable: "--font-ebgaramond", display: "swap", weight: ["400", "500", "600", "700"] });
+const dmserif = DM_Serif_Display({ subsets: ["latin", "latin-ext"], variable: "--font-dmserif", display: "swap", weight: ["400"] });
+const marcellus = Marcellus({ subsets: ["latin", "latin-ext"], variable: "--font-marcellus", display: "swap", weight: ["400"] });
+const inter = Inter({ subsets: ["latin", "latin-ext"], variable: "--font-inter", display: "swap" });
+const worksans = Work_Sans({ subsets: ["latin", "latin-ext"], variable: "--font-worksans", display: "swap", weight: ["400", "500", "600", "700"] });
+const nunito = Nunito({ subsets: ["latin", "latin-ext"], variable: "--font-nunito", display: "swap", weight: ["400", "600", "700", "800"] });
+const dancing = Dancing_Script({ subsets: ["latin", "latin-ext"], variable: "--font-dancing", display: "swap", weight: ["400", "500", "600", "700"] });
 
 export const metadata: Metadata = {
   title: "Ružini domaći kolači — Studio",
@@ -51,7 +73,21 @@ export default function RootLayout({
   return (
     <html
       lang="sr"
-      className={`${archivo.variable} ${playfair.variable} ${cormorant.variable} ${lora.variable} ${karla.variable}`}
+      className={[
+        archivo.variable,
+        playfair.variable,
+        cormorant.variable,
+        lora.variable,
+        karla.variable,
+        fraunces.variable,
+        ebgaramond.variable,
+        dmserif.variable,
+        marcellus.variable,
+        inter.variable,
+        worksans.variable,
+        nunito.variable,
+        dancing.variable,
+      ].join(" ")}
     >
       <body>{children}</body>
     </html>
