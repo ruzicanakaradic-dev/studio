@@ -114,7 +114,9 @@ export default function Studio() {
     width: number;
   }>(null);
   const [exportUI, setExportUI] = useState<null | { pct: number; label: string; error?: boolean }>(null);
+  const [vidPlaying, setVidPlaying] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const bgVideoRef = useRef<HTMLVideoElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -156,6 +158,12 @@ export default function Studio() {
   const slide = project?.slides[active] ?? null;
   const fmt = project ? FORMAT_META[project.format] : null;
   const selText = slide?.texts.find((t) => t.id === selId) ?? null;
+
+  // pri promeni slajda/medija zaustavi video pregled
+  useEffect(() => {
+    bgVideoRef.current?.pause();
+    setVidPlaying(false);
+  }, [active, slide?.mediaId]);
 
   const patchSlide = useCallback(
     (patch: Partial<Slide>) => {
@@ -567,6 +575,12 @@ export default function Studio() {
     setPreviewing(true);
     setActive(0);
     setAnimKey((k) => k + 1);
+    // ako je slajd video — pusti ga u pregledu
+    const v = bgVideoRef.current;
+    if (v) {
+      v.currentTime = 0;
+      v.play().catch(() => {});
+    }
     const n = fmt.multi ? project.slides.length : 1;
     const step = 2200;
     for (let i = 1; i < n; i++) {
@@ -857,7 +871,7 @@ export default function Studio() {
                     const Ico = FMT_ICON[p.format];
                     return (
                       <div key={p.id} className="post-tile" role="button" tabIndex={0} onClick={() => openEditor(p)}>
-                        {url && <img src={url} alt="" />}
+                        {url && (isVideoUrl(url) ? <video src={url} muted playsInline preload="metadata" /> : <img src={url} alt="" />)}
                         <span className="post-badge">
                           <Ico /> {FORMAT_META[p.format].short}
                         </span>
@@ -918,7 +932,7 @@ export default function Studio() {
                     const Ico = FMT_ICON[p.format];
                     return (
                       <div key={p.id} className="post-tile" role="button" tabIndex={0} onClick={() => openEditor(p)}>
-                        {url && <img src={url} alt="" />}
+                        {url && (isVideoUrl(url) ? <video src={url} muted playsInline preload="metadata" /> : <img src={url} alt="" />)}
                         <span className="post-badge">
                           <Ico /> {FORMAT_META[p.format].short}
                         </span>
@@ -1451,18 +1465,39 @@ export default function Studio() {
                       }
                     >
                       {mediaUrl(slide.mediaId) ? (
-                        <img
-                          className="bg"
-                          src={mediaUrl(slide.mediaId)!}
-                          alt=""
-                          draggable={false}
-                          style={{
-                            objectPosition: `${slide.focus.x}% ${slide.focus.y}%`,
-                            transform: `scale(${slide.zoom})`,
-                            transformOrigin: `${slide.focus.x}% ${slide.focus.y}%`,
-                            cursor: slide.zoom > 1 ? "grab" : "default",
-                          }}
-                        />
+                        isVideoUrl(mediaUrl(slide.mediaId)) ? (
+                          <video
+                            className="bg"
+                            ref={bgVideoRef}
+                            src={mediaUrl(slide.mediaId)!}
+                            muted
+                            playsInline
+                            loop
+                            preload="auto"
+                            draggable={false}
+                            onPlay={() => setVidPlaying(true)}
+                            onPause={() => setVidPlaying(false)}
+                            style={{
+                              objectPosition: `${slide.focus.x}% ${slide.focus.y}%`,
+                              transform: `scale(${slide.zoom})`,
+                              transformOrigin: `${slide.focus.x}% ${slide.focus.y}%`,
+                              cursor: slide.zoom > 1 ? "grab" : "default",
+                            }}
+                          />
+                        ) : (
+                          <img
+                            className="bg"
+                            src={mediaUrl(slide.mediaId)!}
+                            alt=""
+                            draggable={false}
+                            style={{
+                              objectPosition: `${slide.focus.x}% ${slide.focus.y}%`,
+                              transform: `scale(${slide.zoom})`,
+                              transformOrigin: `${slide.focus.x}% ${slide.focus.y}%`,
+                              cursor: slide.zoom > 1 ? "grab" : "default",
+                            }}
+                          />
+                        )
                       ) : (
                         <div className="empty">
                           <I.ImgIcon />
@@ -1485,6 +1520,23 @@ export default function Studio() {
                         </div>
                       )}
                     </div>
+
+                    {isVideoUrl(mediaUrl(slide.mediaId)) && (
+                      <button
+                        className={`vid-play${vidPlaying ? " playing" : ""}`}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const v = bgVideoRef.current;
+                          if (!v) return;
+                          if (v.paused) v.play().catch(() => {});
+                          else v.pause();
+                        }}
+                        title={vidPlaying ? "Pauza" : "Pusti video"}
+                      >
+                        {vidPlaying ? <I.Pause /> : <I.Play />}
+                      </button>
+                    )}
 
                     {slide.mediaId && (
                       <>
@@ -1625,7 +1677,11 @@ export default function Studio() {
                           .filter((m) => m.kind === mediaType)
                           .map((m) => (
                             <button key={m.id} className={`media-tile${slide.mediaId === m.id ? " sel" : ""}`} onClick={() => pickMedia(m.id)}>
-                              <img src={m.url} alt={m.name} />
+                              {isVideoUrl(m.url) ? (
+                                <video src={m.url} muted playsInline preload="metadata" />
+                              ) : (
+                                <img src={m.url} alt={m.name} />
+                              )}
                               {m.kind === "video" && (
                                 <span className="vtag">
                                   <I.Play />

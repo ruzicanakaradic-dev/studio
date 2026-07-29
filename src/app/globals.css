@@ -136,7 +136,7 @@ img{display:block;max-width:100%}
 .media-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .media-tile{aspect-ratio:4/5;border-radius:12px;overflow:hidden;position:relative;cursor:pointer;
   border:2px solid transparent;background:var(--lav-soft);transition:.15s;padding:0}
-.media-tile img{width:100%;height:100%;object-fit:cover}
+.media-tile img,.media-tile video{width:100%;height:100%;object-fit:cover}
 .media-tile:hover{transform:translateY(-2px)}
 .media-tile.sel{border-color:var(--gold)}
 .media-tile .vtag{position:absolute;bottom:7px;right:7px;width:24px;height:24px;border-radius:50%;
@@ -188,6 +188,16 @@ img{display:block;max-width:100%}
 .canvas .ig-bars{position:absolute;top:9px;left:14px;right:14px;display:flex;gap:4px;pointer-events:none}
 .canvas .ig-bars i{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.4)}
 .canvas .ig-bars i.a{background:#fff}
+/* Play/Pause preko video-platna */
+.vid-play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;
+  width:64px;height:64px;border-radius:50%;background:rgba(42,32,51,.5);backdrop-filter:blur(6px);
+  color:#fff;display:grid;place-items:center;border:1.5px solid rgba(255,255,255,.55);cursor:pointer;transition:.18s;
+  box-shadow:0 10px 30px -10px rgba(0,0,0,.5)}
+.vid-play:hover{background:rgba(42,32,51,.7);transform:translate(-50%,-50%) scale(1.06)}
+.vid-play svg{width:27px;height:27px;margin-left:3px}
+.vid-play.playing{width:40px;height:40px;left:auto;right:12px;top:auto;bottom:12px;transform:none;opacity:.55}
+.vid-play.playing:hover{opacity:1;transform:scale(1.06)}
+.vid-play.playing svg{width:17px;height:17px;margin-left:0}
 
 .carousel{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:12px 14px;margin-top:14px;
   background:var(--paper);border:1px solid var(--line);border-radius:16px;overflow-x:auto;max-width:100%}
@@ -354,7 +364,7 @@ textarea.txt-in{min-height:64px;line-height:1.4}
 .posts-grid.two{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
 .post-tile{position:relative;aspect-ratio:4/5;border-radius:12px;overflow:hidden;border:1px solid var(--line);cursor:pointer;background:var(--cream-2);transition:.15s}
 .post-tile:hover{transform:translateY(-3px);box-shadow:var(--shadow)}
-.post-tile img{width:100%;height:100%;object-fit:cover}
+.post-tile img,.post-tile video{width:100%;height:100%;object-fit:cover}
 .post-badge{position:absolute;top:8px;left:8px;height:22px;padding:0 8px;border-radius:999px;display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;background:rgba(43,33,48,.6);color:#fff;backdrop-filter:blur(6px)}
 .post-badge svg{width:11px;height:11px}
 .post-tile .card-del{top:8px;right:8px;width:26px;height:26px}
