@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Align, CtaStyle, Format, MediaItem, Project, Slide } from "@/lib/types";
 import { FORMAT_META, TEXT_COLORS, FONTS, fontCss } from "@/lib/types";
-import { newProject, freshSlide, mediaUrl } from "@/lib/samples";
+import { newProject, freshSlide, freshText, mediaUrl } from "@/lib/samples";
 import { fetchProjects, fetchMedia, persistProject, uploadMedia, deleteProject } from "@/lib/store";
 import * as I from "./icons";
 
@@ -38,7 +38,7 @@ export default function Studio() {
   const [active, setActive] = useState(0);
   const [propTab, setPropTab] = useState<"text" | "cta" | "layer">("text");
   const [sheet, setSheet] = useState<null | "media" | "props">(null);
-  const [selOv, setSelOv] = useState<null | "text" | "cta">(null);
+  const [selId, setSelId] = useState<string | null>(null); // text layer id, "cta", or null
   const [toast, setToast] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [animKey, setAnimKey] = useState(0);
@@ -59,9 +59,9 @@ export default function Studio() {
     toastTimer.current = setTimeout(() => setToast(null), 2400);
   }, []);
 
-  // ---- current slide helpers ----
   const slide = project?.slides[active] ?? null;
   const fmt = project ? FORMAT_META[project.format] : null;
+  const selText = slide?.texts.find((t) => t.id === selId) ?? null;
 
   const patchSlide = useCallback(
     (patch: Partial<Slide>) => {
@@ -75,12 +75,52 @@ export default function Studio() {
     [active],
   );
 
+  const patchText = useCallback(
+    (id: string, patch: Partial<Slide["texts"][number]>) => {
+      setProject((p) => {
+        if (!p) return p;
+        const slides = p.slides.slice();
+        const cur = { ...slides[active] };
+        cur.texts = cur.texts.map((t) => (t.id === id ? { ...t, ...patch } : t));
+        slides[active] = cur;
+        return { ...p, slides };
+      });
+    },
+    [active],
+  );
+
+  function addText() {
+    const t = freshText({ pos: { x: 12, y: 40 } });
+    setProject((p) => {
+      if (!p) return p;
+      const slides = p.slides.slice();
+      const cur = { ...slides[active] };
+      cur.texts = [...cur.texts, t];
+      slides[active] = cur;
+      return { ...p, slides };
+    });
+    setSelId(t.id);
+    setPropTab("text");
+  }
+  function deleteText(id: string) {
+    setProject((p) => {
+      if (!p) return p;
+      const slides = p.slides.slice();
+      const cur = { ...slides[active] };
+      cur.texts = cur.texts.filter((t) => t.id !== id);
+      slides[active] = cur;
+      return { ...p, slides };
+    });
+    setSelId((s) => (s === id ? null : s));
+  }
+
   // ---- navigation ----
   function openEditor(p: Project) {
     setProject(structuredClone(p));
     setActive(0);
     setPropTab("text");
-    setSelOv(null);
+    setSelId(null);
+    setSafeZone(false);
     setView("editor");
     setSheet(null);
   }
@@ -96,23 +136,27 @@ export default function Studio() {
       updatedAt: new Date().toISOString(),
     };
     const res = await persistProject(toSave);
-    if (res.id && res.id !== project.id) {
-      setProject((p) => (p ? { ...p, id: res.id! } : p));
-    }
+    if (res.id && res.id !== project.id) setProject((p) => (p ? { ...p, id: res.id! } : p));
     setProjects(await fetchProjects());
     if (exported) showToast(res.demo ? "Izvezeno (demo režim)" : "Izvezeno — spremno za Instagram ✦");
     else showToast(res.demo ? "Sačuvano (demo režim)" : "Sačuvano");
   }
 
-  // ---- drag overlays ----
-  function startDrag(key: "text" | "cta", e: React.PointerEvent) {
+  // ---- drag (text layer / cta) ----
+  function startDrag(target: { kind: "text"; id: string } | { kind: "cta" }, e: React.PointerEvent) {
     e.preventDefault();
-    setSelOv(key);
+    e.stopPropagation();
+    setSelId(target.kind === "cta" ? "cta" : target.id);
+    if (target.kind === "cta") setPropTab("cta");
+    else setPropTab("text");
     const canvas = canvasRef.current;
     if (!canvas || !slide) return;
     const rect = canvas.getBoundingClientRect();
     const start = { x: e.clientX, y: e.clientY };
-    const origin = { ...slide.pos[key] };
+    const origin =
+      target.kind === "cta"
+        ? { ...slide.ctaPos }
+        : { ...(slide.texts.find((t) => t.id === target.id)?.pos ?? { x: 0, y: 0 }) };
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     const move = (ev: PointerEvent) => {
       let nx = origin.x + ((ev.clientX - start.x) / rect.width) * 100;
@@ -123,7 +167,8 @@ export default function Studio() {
         if (!p) return p;
         const slides = p.slides.slice();
         const cur = { ...slides[active] };
-        cur.pos = { ...cur.pos, [key]: { x: nx, y: ny } };
+        if (target.kind === "cta") cur.ctaPos = { x: nx, y: ny };
+        else cur.texts = cur.texts.map((t) => (t.id === target.id ? { ...t, pos: { x: nx, y: ny } } : t));
         slides[active] = cur;
         return { ...p, slides };
       });
@@ -199,7 +244,7 @@ export default function Studio() {
     });
   }
 
-  // ---- delete project (dashboard) ----
+  // ---- delete project ----
   async function removeProject(e: React.MouseEvent, id: string, name: string) {
     e.stopPropagation();
     if (!window.confirm(`Obrisati projekat „${name}"? Ovo se ne može poništiti.`)) return;
@@ -208,7 +253,7 @@ export default function Studio() {
     showToast("Projekat obrisan");
   }
 
-  // ---- preview / animacije ----
+  // ---- preview ----
   function clearPreviewTimers() {
     previewTimers.current.forEach(clearTimeout);
     previewTimers.current = [];
@@ -229,13 +274,15 @@ export default function Studio() {
         }, step * i),
       );
     }
-    previewTimers.current.push(
-      setTimeout(() => setPreviewing(false), step * n + 600),
-    );
+    previewTimers.current.push(setTimeout(() => setPreviewing(false), step * n + 600));
   }
   useEffect(() => () => clearPreviewTimers(), []);
 
   const filtered = filter === "all" ? projects : projects.filter((p) => p.format === filter);
+  const textAnimStyle = (delay: number): React.CSSProperties =>
+    previewing && project && project.textAnim !== "none"
+      ? { animation: `${project.textAnim === "rise" ? "fxRise" : "fxFade"} .55s ease ${delay}s both` }
+      : {};
 
   return (
     <div className="app">
@@ -279,12 +326,6 @@ export default function Studio() {
           </div>
         ) : (
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <button className="icon-btn desktop-only" title="Opozovi">
-              <I.Undo />
-            </button>
-            <button className="icon-btn desktop-only" title="Ponovi">
-              <I.Redo />
-            </button>
             <button className="btn btn-ghost desktop-only" onClick={() => save(false)}>
               Sačuvaj nacrt
             </button>
@@ -332,11 +373,7 @@ export default function Studio() {
                 <h2>Tvoji projekti</h2>
                 <div className="seg">
                   {(["all", "post", "story", "reels"] as const).map((f) => (
-                    <button
-                      key={f}
-                      className={filter === f ? "on" : ""}
-                      onClick={() => setFilter(f)}
-                    >
+                    <button key={f} className={filter === f ? "on" : ""} onClick={() => setFilter(f)}>
                       {f === "all" ? "Svi" : FORMAT_META[f].short}
                     </button>
                   ))}
@@ -415,10 +452,7 @@ export default function Studio() {
             </div>
 
             <div className="ed-body">
-              <div
-                className={`sheet-backdrop${sheet ? " on" : ""}`}
-                onClick={() => setSheet(null)}
-              />
+              <div className={`sheet-backdrop${sheet ? " on" : ""}`} onClick={() => setSheet(null)} />
 
               {/* LEFT: media */}
               <aside className={`panel panel-l${sheet === "media" ? " open" : ""}`}>
@@ -429,16 +463,10 @@ export default function Studio() {
                   </button>
                 </div>
                 <div className="media-tabs">
-                  <button
-                    className={`chip${mediaType === "image" ? " on" : ""}`}
-                    onClick={() => setMediaType("image")}
-                  >
+                  <button className={`chip${mediaType === "image" ? " on" : ""}`} onClick={() => setMediaType("image")}>
                     Slike
                   </button>
-                  <button
-                    className={`chip${mediaType === "video" ? " on" : ""}`}
-                    onClick={() => setMediaType("video")}
-                  >
+                  <button className={`chip${mediaType === "video" ? " on" : ""}`} onClick={() => setMediaType("video")}>
                     Video
                   </button>
                 </div>
@@ -465,16 +493,9 @@ export default function Studio() {
                       Otpremi svoju
                     </button>
                   </div>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="image/*,video/*"
-                    hidden
-                    onChange={onUpload}
-                  />
+                  <input ref={fileRef} type="file" accept="image/*,video/*" hidden onChange={onUpload} />
                   <p className="hint" style={{ marginTop: 14 }}>
-                    <I.Info /> Klikni na sliku da je dodaš na platno. Za carousel dodaj više slajdova
-                    ispod platna.
+                    <I.Info /> Klikni na sliku da je dodaš na platno. Više strana/slajdova dodaješ ispod platna.
                   </p>
                 </div>
               </aside>
@@ -494,11 +515,7 @@ export default function Studio() {
                       </button>
                     );
                   })}
-                  <button
-                    className={`fmt-chip${previewing ? " on" : ""}`}
-                    onClick={playPreview}
-                    title="Pregledaj animaciju"
-                  >
+                  <button className={`fmt-chip${previewing ? " on" : ""}`} onClick={playPreview} title="Pregledaj animaciju">
                     <I.Play style={{ width: 13, height: 13 }} /> Pregled
                   </button>
                 </div>
@@ -515,7 +532,7 @@ export default function Studio() {
                     }}
                     onPointerDown={(e) => {
                       if ((e.target as HTMLElement).closest(".ov")) return;
-                      setSelOv(null);
+                      setSelId(null);
                       startBgPan(e);
                     }}
                   >
@@ -524,11 +541,7 @@ export default function Studio() {
                       key={`fx-${animKey}`}
                       style={
                         previewing && project.transition !== "none"
-                          ? {
-                              animation: `${
-                                project.transition === "slide" ? "fxSlideIn" : "fxFadeIn"
-                              } .5s ease both`,
-                            }
+                          ? { animation: `${project.transition === "slide" ? "fxSlideIn" : "fxFadeIn"} .5s ease both` }
                           : undefined
                       }
                     >
@@ -553,7 +566,6 @@ export default function Studio() {
                         </div>
                       )}
                       <div className="scrim" style={{ opacity: slide.mediaId ? slide.scrim / 100 : 0 }} />
-
                       {fmt.story && (
                         <div className="ig-bars">
                           <i className="a" />
@@ -571,47 +583,31 @@ export default function Studio() {
 
                     {slide.mediaId && (
                       <>
-                        <div
-                          key={`ovt-${animKey}`}
-                          className={`ov${selOv === "text" ? " sel" : ""}`}
-                          style={{
-                            left: `${slide.pos.text.x}%`,
-                            top: `${slide.pos.text.y}%`,
-                            textAlign: slide.align,
-                            ...(previewing && project.textAnim !== "none"
-                              ? {
-                                  animation: `${
-                                    project.textAnim === "rise" ? "fxRise" : "fxFade"
-                                  } .55s ease .15s both`,
-                                }
-                              : {}),
-                          }}
-                          onPointerDown={(e) => startDrag("text", e)}
-                        >
-                          {slide.showTitle && slide.title && (
+                        {slide.texts.map((t, i) => (
+                          <div
+                            key={`${t.id}-${animKey}`}
+                            className={`ov${selId === t.id ? " sel" : ""}`}
+                            style={{
+                              left: `${t.pos.x}%`,
+                              top: `${t.pos.y}%`,
+                              textAlign: t.align,
+                              ...textAnimStyle(0.12 + i * 0.08),
+                            }}
+                            onPointerDown={(e) => startDrag({ kind: "text", id: t.id }, e)}
+                          >
                             <div
-                              className="ov-title"
+                              className="ov-text"
                               style={{
-                                fontSize: slide.titleSize,
-                                color: slide.color,
-                                fontFamily: fontCss(slide.font),
+                                fontFamily: fontCss(t.font),
+                                fontSize: t.size,
+                                color: t.color,
+                                fontWeight: t.bold ? 700 : 500,
                               }}
                             >
-                              {slide.title}
+                              {t.content}
                             </div>
-                          )}
-                          {slide.showSub && slide.sub && (
-                            <div
-                              className="ov-sub"
-                              style={{
-                                fontSize: Math.max(13, slide.titleSize * 0.42),
-                                color: slide.color,
-                              }}
-                            >
-                              {slide.sub}
-                            </div>
-                          )}
-                        </div>
+                          </div>
+                        ))}
 
                         {safeZone && (
                           <div
@@ -626,22 +622,13 @@ export default function Studio() {
                             <span className="safezone-tag">Safe zone</span>
                           </div>
                         )}
+
                         {slide.cta && (
                           <div
-                            key={`ovc-${animKey}`}
-                            className={`ov${selOv === "cta" ? " sel" : ""}`}
-                            style={{
-                              left: `${slide.pos.cta.x}%`,
-                              top: `${slide.pos.cta.y}%`,
-                              ...(previewing && project.textAnim !== "none"
-                                ? {
-                                    animation: `${
-                                      project.textAnim === "rise" ? "fxRise" : "fxFade"
-                                    } .55s ease .28s both`,
-                                  }
-                                : {}),
-                            }}
-                            onPointerDown={(e) => startDrag("cta", e)}
+                            key={`cta-${animKey}`}
+                            className={`ov${selId === "cta" ? " sel" : ""}`}
+                            style={{ left: `${slide.ctaPos.x}%`, top: `${slide.ctaPos.y}%`, ...textAnimStyle(0.28) }}
+                            onPointerDown={(e) => startDrag({ kind: "cta" }, e)}
                           >
                             <span className={`ov-cta ${slide.ctaStyle}`}>
                               {slide.ctaText} <I.Arrow />
@@ -665,7 +652,10 @@ export default function Studio() {
                           <button
                             key={sl.id}
                             className={`slide-thumb${i === active ? " on" : ""}`}
-                            onClick={() => setActive(i)}
+                            onClick={() => {
+                              setActive(i);
+                              setSelId(null);
+                            }}
                           >
                             <span className="n">{i + 1}</span>
                             {u && <img src={u} alt="" />}
@@ -690,9 +680,7 @@ export default function Studio() {
                     <select
                       className="mini-select"
                       value={project.transition}
-                      onChange={(e) =>
-                        setProject({ ...project, transition: e.target.value as Project["transition"] })
-                      }
+                      onChange={(e) => setProject({ ...project, transition: e.target.value as Project["transition"] })}
                       title="Prelaz između slajdova"
                     >
                       <option value="none">Prelaz: bez</option>
@@ -723,123 +711,134 @@ export default function Studio() {
                   </button>
                 </div>
                 <div className="panel-scroll">
+                  {/* ---- TEXT ---- */}
                   {propTab === "text" && (
                     <>
+                      <button className="btn btn-primary" style={{ width: "100%", marginBottom: 14 }} onClick={addText}>
+                        <I.Plus /> Dodaj tekst
+                      </button>
+
                       <div className="field">
-                        <div className="label-row">
-                          <label style={{ margin: 0 }}>Naslov</label>
-                          <button
-                            className={`switch sm${slide.showTitle ? " on" : ""}`}
-                            onClick={() => patchSlide({ showTitle: !slide.showTitle })}
-                            title="Prikaži / sakrij naslov"
-                          >
-                            <i />
-                          </button>
-                        </div>
-                        {slide.showTitle && (
-                          <textarea
-                            className="txt-in"
-                            rows={2}
-                            value={slide.title}
-                            onChange={(e) => patchSlide({ title: e.target.value })}
-                          />
+                        <label>Slojevi teksta</label>
+                        {slide.texts.length === 0 && (
+                          <p style={{ fontSize: 12.5, color: "var(--muted)" }}>Nema teksta. Dodaj novi tekst iznad.</p>
                         )}
-                      </div>
-                      {slide.showTitle && (
-                        <div className="field">
-                          <label>Font naslova</label>
-                          <select
-                            className="mini-select"
-                            style={{ width: "100%", height: 42 }}
-                            value={slide.font}
-                            onChange={(e) => patchSlide({ font: e.target.value })}
-                          >
-                            {FONTS.map((f) => (
-                              <option key={f.key} value={f.key}>
-                                {f.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                      <div className="field">
-                        <div className="label-row">
-                          <label style={{ margin: 0 }}>Tekst (podnaslov)</label>
-                          <button
-                            className={`switch sm${slide.showSub ? " on" : ""}`}
-                            onClick={() => patchSlide({ showSub: !slide.showSub })}
-                            title="Prikaži / sakrij tekst"
-                          >
-                            <i />
-                          </button>
-                        </div>
-                        {slide.showSub && (
-                          <textarea
-                            className="txt-in"
-                            rows={2}
-                            value={slide.sub}
-                            onChange={(e) => patchSlide({ sub: e.target.value })}
-                          />
-                        )}
-                      </div>
-                      <div className="divide" />
-                      <div className="field">
-                        <label>Veličina naslova</label>
-                        <div className="range-row">
-                          <input
-                            type="range"
-                            className="range"
-                            min={20}
-                            max={72}
-                            value={slide.titleSize}
-                            onChange={(e) => patchSlide({ titleSize: +e.target.value })}
-                          />
-                          <span className="range-val">{slide.titleSize} px</span>
-                        </div>
-                      </div>
-                      <div className="field">
-                        <label>Poravnanje</label>
-                        <div className="seg-2">
-                          {(
-                            [
-                              ["left", I.AlignLeft],
-                              ["center", I.AlignCenter],
-                              ["right", I.AlignRight],
-                            ] as [Align, React.FC<React.SVGProps<SVGSVGElement>>][]
-                          ).map(([a, Ico]) => (
+                        {slide.texts.map((t) => (
+                          <div key={t.id} className={`layer-item${selId === t.id ? " on" : ""}`} onClick={() => setSelId(t.id)}>
+                            <I.TextIcon style={{ width: 15, height: 15, flex: "0 0 15px" }} />
+                            <span className="layer-name">{t.content || "Prazan tekst"}</span>
                             <button
-                              key={a}
-                              className={slide.align === a ? "on" : ""}
-                              onClick={() => patchSlide({ align: a })}
+                              className="layer-del"
+                              title="Obriši tekst"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteText(t.id);
+                              }}
                             >
-                              <Ico />
+                              <I.Trash />
                             </button>
-                          ))}
-                        </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="field">
-                        <label>Boja teksta</label>
-                        <div className="swatches">
-                          {TEXT_COLORS.map((c) => (
-                            <button
-                              key={c}
-                              className={`sw${slide.color === c ? " on" : ""}`}
-                              style={{ background: c }}
-                              onClick={() => patchSlide({ color: c })}
+
+                      {selText ? (
+                        <>
+                          <div className="divide" />
+                          <div className="field">
+                            <label>Sadržaj</label>
+                            <textarea
+                              className="txt-in"
+                              rows={3}
+                              value={selText.content}
+                              onChange={(e) => patchText(selText.id, { content: e.target.value })}
                             />
-                          ))}
-                        </div>
-                      </div>
+                          </div>
+                          <div className="field">
+                            <label>Font</label>
+                            <select
+                              className="mini-select"
+                              style={{ width: "100%", height: 42 }}
+                              value={selText.font}
+                              onChange={(e) => patchText(selText.id, { font: e.target.value })}
+                            >
+                              {FONTS.map((f) => (
+                                <option key={f.key} value={f.key}>
+                                  {f.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="field">
+                            <label>Veličina</label>
+                            <div className="range-row">
+                              <input
+                                type="range"
+                                className="range"
+                                min={12}
+                                max={80}
+                                value={selText.size}
+                                onChange={(e) => patchText(selText.id, { size: +e.target.value })}
+                              />
+                              <span className="range-val">{selText.size} px</span>
+                            </div>
+                          </div>
+                          <div className="field">
+                            <label>Poravnanje i stil</label>
+                            <div className="seg-2">
+                              {(
+                                [
+                                  ["left", I.AlignLeft],
+                                  ["center", I.AlignCenter],
+                                  ["right", I.AlignRight],
+                                ] as [Align, React.FC<React.SVGProps<SVGSVGElement>>][]
+                              ).map(([a, Ico]) => (
+                                <button
+                                  key={a}
+                                  className={selText.align === a ? "on" : ""}
+                                  onClick={() => patchText(selText.id, { align: a })}
+                                >
+                                  <Ico />
+                                </button>
+                              ))}
+                              <button
+                                className={selText.bold ? "on" : ""}
+                                style={{ fontWeight: 800 }}
+                                onClick={() => patchText(selText.id, { bold: !selText.bold })}
+                                title="Podebljano"
+                              >
+                                B
+                              </button>
+                            </div>
+                          </div>
+                          <div className="field">
+                            <label>Boja teksta</label>
+                            <div className="swatches">
+                              {TEXT_COLORS.map((c) => (
+                                <button
+                                  key={c}
+                                  className={`sw${selText.color === c ? " on" : ""}`}
+                                  style={{ background: c }}
+                                  onClick={() => patchText(selText.id, { color: c })}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="hint">
+                          <I.Info /> Izaberi tekst iz liste (ili klikni na njega na platnu) da mu menjaš font,
+                          veličinu, boju i poziciju.
+                        </p>
+                      )}
+
                       <div className="divide" />
                       <div className="field">
-                        <label>Animacija teksta</label>
+                        <label>Animacija teksta (u pregledu)</label>
                         <select
                           className="mini-select"
                           style={{ width: "100%", height: 42 }}
                           value={project.textAnim}
-                          onChange={(e) =>
-                            setProject({ ...project, textAnim: e.target.value as Project["textAnim"] })
-                          }
+                          onChange={(e) => setProject({ ...project, textAnim: e.target.value as Project["textAnim"] })}
                         >
                           <option value="none">Bez animacije</option>
                           <option value="fade">Pretapanje (fade)</option>
@@ -847,13 +846,7 @@ export default function Studio() {
                         </select>
                         <button
                           className="chip"
-                          style={{
-                            marginTop: 12,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 6,
-                            whiteSpace: "nowrap",
-                          }}
+                          style={{ marginTop: 12, display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}
                           onClick={playPreview}
                         >
                           <I.Play style={{ width: 12, height: 12 }} /> Pregledaj animaciju
@@ -862,14 +855,12 @@ export default function Studio() {
                     </>
                   )}
 
+                  {/* ---- CTA ---- */}
                   {propTab === "cta" && (
                     <>
                       <div className="toggle-row">
                         <b>Prikaži CTA dugme</b>
-                        <button
-                          className={`switch${slide.cta ? " on" : ""}`}
-                          onClick={() => patchSlide({ cta: !slide.cta })}
-                        >
+                        <button className={`switch${slide.cta ? " on" : ""}`} onClick={() => patchSlide({ cta: !slide.cta })}>
                           <i />
                         </button>
                       </div>
@@ -878,11 +869,7 @@ export default function Studio() {
                       </p>
                       <div className="field">
                         <label>Tekst dugmeta</label>
-                        <input
-                          className="txt-in"
-                          value={slide.ctaText}
-                          onChange={(e) => patchSlide({ ctaText: e.target.value })}
-                        />
+                        <input className="txt-in" value={slide.ctaText} onChange={(e) => patchSlide({ ctaText: e.target.value })} />
                       </div>
                       <div className="field">
                         <label>Brzi predlozi</label>
@@ -905,11 +892,7 @@ export default function Studio() {
                               ["cta-outline", "Obris"],
                             ] as [CtaStyle, string][]
                           ).map(([cs, label]) => (
-                            <button
-                              key={cs}
-                              className={slide.ctaStyle === cs ? "on" : ""}
-                              onClick={() => patchSlide({ ctaStyle: cs })}
-                            >
+                            <button key={cs} className={slide.ctaStyle === cs ? "on" : ""} onClick={() => patchSlide({ ctaStyle: cs })}>
                               {label}
                             </button>
                           ))}
@@ -918,6 +901,7 @@ export default function Studio() {
                     </>
                   )}
 
+                  {/* ---- LAYER ---- */}
                   {propTab === "layer" && (
                     <>
                       <div className="field">
@@ -941,8 +925,7 @@ export default function Studio() {
                           Resetuj kadar
                         </button>
                         <p className="hint" style={{ marginTop: 12 }}>
-                          <I.Info /> Prevuci sliku po platnu da je pomeriš (kadriraš). Zumom je
-                          uvećaj pa je nameštaj.
+                          <I.Info /> Prevuci sliku po platnu da je pomeriš (kadriraš). Zumom je uvećaj pa je nameštaj.
                         </p>
                       </div>
                       <div className="divide" />
@@ -968,16 +951,13 @@ export default function Studio() {
                         <label>Safe zone (bezbedna zona)</label>
                         <div className="toggle-row">
                           <b style={{ fontWeight: 500, fontSize: 13.5 }}>Prikaži bezbednu zonu</b>
-                          <button
-                            className={`switch${safeZone ? " on" : ""}`}
-                            onClick={() => setSafeZone((v) => !v)}
-                          >
+                          <button className={`switch${safeZone ? " on" : ""}`} onClick={() => setSafeZone((v) => !v)}>
                             <i />
                           </button>
                         </div>
                         <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.5 }}>
-                          Drži naslov i CTA unutar isprekidane linije — van nje interfejs Instagrama /
-                          TikToka (nalog, opis, dugmad) prekriva sadržaj.
+                          Drži tekst i CTA unutar isprekidane linije — van nje interfejs Instagrama / TikToka
+                          (nalog, opis, dugmad) prekriva sadržaj.
                         </p>
                       </div>
                       <div className="divide" />
@@ -993,10 +973,6 @@ export default function Studio() {
                           </button>
                         </div>
                       </div>
-                      <div className="divide" />
-                      <p className="hint">
-                        <I.Layers /> Prevuci naslov i dugme direktno po platnu da ih rasporediš.
-                      </p>
                     </>
                   )}
                 </div>

@@ -23,25 +23,35 @@ export function uid(prefix = "s"): string {
   return `${prefix}_${counter}_${Math.round(performance.now() * 1000) % 1_000_000}`;
 }
 
+export function freshText(over: Partial<Slide["texts"][number]> = {}): Slide["texts"][number] {
+  return {
+    id: uid("txt"),
+    content: "Novi tekst",
+    font: "inter",
+    size: 24,
+    color: "#FFFFFF",
+    align: "left",
+    bold: false,
+    pos: { x: 12, y: 42 },
+    ...over,
+  };
+}
+
 export function freshSlide(mediaId: string | null = null): Slide {
   return {
     id: uid("slide"),
     mediaId,
-    title: "Domaći sitni kolači",
-    sub: "Ručno pravljeni, sa ljubavlju",
-    titleSize: 38,
-    align: "left",
-    color: "#FFFFFF",
+    texts: [
+      freshText({ content: "Domaći sitni kolači", font: "fraunces", size: 38, pos: { x: 8, y: 54 } }),
+      freshText({ content: "Ručno pravljeni, sa ljubavlju", font: "inter", size: 17, pos: { x: 8, y: 68 } }),
+    ],
     cta: true,
     ctaText: "Naruči",
     ctaStyle: "cta-fill",
+    ctaPos: { x: 8, y: 87 },
     scrim: 42,
     zoom: 1,
     focus: { x: 50, y: 50 },
-    font: "fraunces",
-    showTitle: true,
-    showSub: true,
-    pos: { text: { x: 8, y: 55 }, cta: { x: 8, y: 87 } },
   };
 }
 

@@ -3,7 +3,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "./supabase/client";
 import { MEDIA_BUCKET } from "./supabase/config";
-import { SAMPLE_PROJECTS, SAMPLE_MEDIA, mediaUrl, freshSlide } from "./samples";
+import { SAMPLE_PROJECTS, SAMPLE_MEDIA, mediaUrl, freshSlide, freshText } from "./samples";
 import type { MediaItem, Project, Slide } from "./types";
 
 /**
@@ -26,19 +26,63 @@ async function ensureSession(supabase: SupabaseClient): Promise<void> {
   }
 }
 
-// backfill defaults for slides saved before newer fields existed
-function normalizeSlide(s: Partial<Slide>): Slide {
-  const base = freshSlide(s.mediaId ?? null);
+// backfill defaults + migrate legacy title/sub slides into the text-layer model
+function normalizeSlide(raw: unknown): Slide {
+  const s = (raw ?? {}) as Record<string, unknown>;
+  const base = freshSlide((s.mediaId as string) ?? null);
+
+  // migrate legacy { title, sub, ... } → texts[]
+  let texts = s.texts as Slide["texts"] | undefined;
+  if (!Array.isArray(texts)) {
+    const legacy: Slide["texts"] = [];
+    const oldPos = (s.pos as { text?: { x: number; y: number } } | undefined)?.text;
+    const size = (s.titleSize as number) ?? 38;
+    const color = (s.color as string) ?? "#FFFFFF";
+    const align = (s.align as Slide["texts"][number]["align"]) ?? "left";
+    if (s.title && (s.showTitle ?? true)) {
+      legacy.push(
+        freshText({
+          content: s.title as string,
+          font: (s.font as string) ?? "fraunces",
+          size,
+          color,
+          align,
+          pos: oldPos ?? { x: 8, y: 54 },
+        }),
+      );
+    }
+    if (s.sub && (s.showSub ?? true)) {
+      legacy.push(
+        freshText({
+          content: s.sub as string,
+          font: "inter",
+          size: Math.max(13, size * 0.42),
+          color,
+          align,
+          pos: { x: oldPos?.x ?? 8, y: (oldPos?.y ?? 54) + 14 },
+        }),
+      );
+    }
+    texts = legacy.length ? legacy : base.texts;
+  }
+
+  const ctaPos =
+    (s.ctaPos as Slide["ctaPos"]) ??
+    (s.pos as { cta?: { x: number; y: number } } | undefined)?.cta ??
+    base.ctaPos;
+
   return {
-    ...base,
-    ...s,
-    zoom: s.zoom ?? base.zoom,
-    focus: s.focus ?? base.focus,
-    font: s.font ?? base.font,
-    showTitle: s.showTitle ?? base.showTitle,
-    showSub: s.showSub ?? base.showSub,
-    pos: s.pos ?? base.pos,
-  } as Slide;
+    id: (s.id as string) ?? base.id,
+    mediaId: (s.mediaId as string) ?? null,
+    texts,
+    cta: (s.cta as boolean) ?? base.cta,
+    ctaText: (s.ctaText as string) ?? base.ctaText,
+    ctaStyle: (s.ctaStyle as Slide["ctaStyle"]) ?? base.ctaStyle,
+    ctaPos,
+    scrim: (s.scrim as number) ?? base.scrim,
+    zoom: (s.zoom as number) ?? base.zoom,
+    focus: (s.focus as Slide["focus"]) ?? base.focus,
+  };
 }
 
 function rowToProject(row: Record<string, unknown>): Project {

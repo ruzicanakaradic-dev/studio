@@ -7,24 +7,28 @@ export interface Pos {
   y: number;
 }
 
+export interface TextLayer {
+  id: string;
+  content: string;
+  font: string; // ključ iz FONTS
+  size: number; // px
+  color: string;
+  align: Align;
+  bold: boolean;
+  pos: Pos; // 0..100
+}
+
 export interface Slide {
   id: string;
   mediaId: string | null; // sample id or media URL
-  title: string;
-  sub: string;
-  titleSize: number;
-  align: Align;
-  color: string;
+  texts: TextLayer[]; // slobodan broj tekstualnih slojeva
   cta: boolean;
   ctaText: string;
   ctaStyle: CtaStyle;
+  ctaPos: Pos;
   scrim: number;
   zoom: number; // 1..3 — uvećanje slike
   focus: Pos; // 0..100 — kadriranje (object-position)
-  font: string; // ključ iz FONTS — font naslova
-  showTitle: boolean;
-  showSub: boolean;
-  pos: { text: Pos; cta: Pos };
 }
 
 export interface FontOption {
