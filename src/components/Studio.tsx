@@ -112,7 +112,13 @@ export default function Studio() {
   const [novaTopic, setNovaTopic] = useState("Torta od malina, nova ove nedelje");
   const [novaCaps, setNovaCaps] = useState<{ kicker: string; text: string }[]>([]);
   const [novaCapIdx, setNovaCapIdx] = useState(0);
-  const [exportUI, setExportUI] = useState<null | { pct: number; label: string; error?: boolean }>(null);
+  const [exportUI, setExportUI] = useState<null | {
+    pct: number;
+    label: string;
+    error?: boolean;
+    files?: File[]; // spremni fajlovi za „Sačuvaj u Photos"
+    base?: string;
+  }>(null);
   const [vidPlaying, setVidPlaying] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
   const bgVideoRef = useRef<HTMLVideoElement>(null);
@@ -297,6 +303,56 @@ export default function Studio() {
     else showToast(res.demo ? "Sačuvano (demo režim)" : "Sačuvano");
   }
 
+  // ---- isporuka izvezenih fajlova ----
+  function filesFromOutputs(outputs: { name: string; blob: Blob }[]): File[] {
+    return outputs.map((o) => {
+      const type = o.name.endsWith(".png")
+        ? "image/png"
+        : o.name.endsWith(".webm")
+          ? "video/webm"
+          : "video/mp4";
+      return new File([o.blob], o.name, { type });
+    });
+  }
+  function canShareFiles(files: File[]): boolean {
+    try {
+      const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
+      return !!(
+        files.length &&
+        typeof navigator.share === "function" &&
+        typeof nav.canShare === "function" &&
+        nav.canShare({ files })
+      );
+    } catch {
+      return false;
+    }
+  }
+  async function downloadOutputs(files: File[], base: string) {
+    if (files.length === 1) {
+      downloadBlob(files[0], files[0].name);
+    } else {
+      const zip = await zipMixed(files.map((f) => ({ name: f.name, blob: f })));
+      downloadBlob(zip, `${base}.zip`);
+    }
+  }
+  // tap na „Sačuvaj u Photos" — otvara iOS meni za čuvanje u galeriju
+  async function shareExport() {
+    const files = exportUI?.files;
+    const base = exportUI?.base || "objava";
+    if (!files || files.length === 0) return;
+    try {
+      await (navigator as Navigator & { share: (d: { files: File[] }) => Promise<void> }).share({ files });
+      logEvent("ok", "Sačuvano", "Otvoren je meni za čuvanje u Photos / galeriju.");
+      setExportUI(null);
+    } catch (err) {
+      // AbortError = korisnik otkazao → ostavi dugme da može opet
+      if ((err as Error)?.name === "AbortError") return;
+      await downloadOutputs(files, base);
+      setExportUI({ pct: 100, label: files.length > 1 ? `${files.length} fajla preuzeto ✦` : "Preuzeto ✦" });
+      setTimeout(() => setExportUI(null), 2500);
+    }
+  }
+
   // ---- stvarni izvoz: sve se crta direktno na canvasu (pouzdano na iOS-u) ----
   async function runExport() {
     if (!project || exportUI) return;
@@ -312,6 +368,7 @@ export default function Studio() {
     }
     const hasVideo = items.some((it) => it.video);
     const isReels = proj.format === "reels";
+    let awaitingShare = false; // ako čekamo tap na „Sačuvaj u Photos" — ne gasi preklop automatski
 
     logEvent("info", `Počeo izvoz objave „${proj.name}"`, `Format: ${fmt.short} · ${items.length} ${items.length === 1 ? "medij" : "medija"}${hasVideo ? " (ima videa)" : ""}.`);
 
@@ -357,6 +414,7 @@ export default function Studio() {
     }
 
     const base = safeFileName(proj.name);
+    const outputs: { name: string; blob: Blob }[] = [];
     try {
       if (isReels) {
         // montaža: slike stoje, video slajdovi se puštaju — jedan .mp4
@@ -372,31 +430,23 @@ export default function Studio() {
             const { blob, ext } = await exportReelsMontage(ritems, W, H, scale, proj.transition, (p) =>
               setExportUI({ pct: 20 + Math.round(p * 75), label: "Snimam video…" }),
             );
-            downloadBlob(blob, `${base}.${ext}`);
-            setExportUI({ pct: 100, label: `Reels spreman ✦ (.${ext})` });
-            logEvent("ok", `Reels izvezen — ${base}.${ext}`, "Video je preuzet na uređaj.");
+            outputs.push({ name: `${base}.${ext}`, blob });
             ok = true;
           } catch (e) {
-            logEvent("warn", "Snimanje videa nije uspelo", "Umesto videa čuvam pojedinačne kadrove (slike) u .zip-u.");
+            logEvent("warn", "Snimanje videa nije uspelo", "Umesto videa čuvam pojedinačne kadrove (slike).");
             console.warn("reels montage fallback", e);
           }
         } else {
           logEvent("warn", "Ovaj pregledač ne podržava snimanje videa", "Umesto videa čuvam kadrove kao slike.");
         }
         if (!ok) {
-          const frames: { name: string; blob: Blob }[] = [];
           for (let i = 0; i < items.length; i++) {
             const im = await imgFor(items[i].src);
-            frames.push({ name: `${base}-${i + 1}.png`, blob: await renderSlidePng(items[i].slide, im, W, H, scale) });
+            outputs.push({ name: `${base}-${i + 1}.png`, blob: await renderSlidePng(items[i].slide, im, W, H, scale) });
           }
-          const zip = await zipMixed(frames);
-          downloadBlob(zip, `${base}-reels-kadrovi.zip`);
-          setExportUI({ pct: 100, label: "Video nije podržan — sačuvani kadrovi (.zip)." });
-          logEvent("ok", `Kadrovi izvezeni — ${base}-reels-kadrovi.zip`, `${frames.length} slika preuzeto na uređaj.`);
         }
       } else {
         // Objava / Story / Carousel — po slajdu: slika → PNG, video → MP4/WebM
-        const outputs: { name: string; blob: Blob }[] = [];
         for (let i = 0; i < items.length; i++) {
           const it = items[i];
           const nm = items.length === 1 ? base : `${base}-${i + 1}`;
@@ -444,22 +494,30 @@ export default function Studio() {
             }
           }
         }
-
-        if (outputs.length === 0) {
-          throw new Error("nema-izlaza");
-        } else if (outputs.length === 1) {
-          downloadBlob(outputs[0].blob, outputs[0].name);
-          setExportUI({ pct: 100, label: outputs[0].name.endsWith(".png") ? "Slika spremna ✦" : "Video spreman ✦" });
-          logEvent("ok", `Izvezeno — ${outputs[0].name}`, "Fajl je preuzet na uređaj.");
-        } else {
-          const zip = await zipMixed(outputs);
-          downloadBlob(zip, `${base}.zip`);
-          const nImg = outputs.filter((o) => o.name.endsWith(".png")).length;
-          const nVid = outputs.length - nImg;
-          setExportUI({ pct: 100, label: `${nImg} slika${nVid ? ` + ${nVid} video` : ""} u .zip ✦` });
-          logEvent("ok", `Izvezeno — ${base}.zip`, `${nImg} slika${nVid ? ` + ${nVid} video` : ""}, numerisano po redu. Preuzeto na uređaj.`);
-        }
       }
+
+      if (outputs.length === 0) throw new Error("nema-izlaza");
+
+      // ── Isporuka: na telefonu „Sačuvaj u Photos", inače preuzimanje ──
+      const files = filesFromOutputs(outputs);
+      const nImg = files.filter((f) => f.name.endsWith(".png")).length;
+      const nVid = files.length - nImg;
+      const kindTxt = files.length > 1 ? `${nImg} slika${nVid ? ` + ${nVid} video` : ""}` : nImg ? "slika" : "video";
+      if (canShareFiles(files)) {
+        awaitingShare = true;
+        setExportUI({
+          pct: 100,
+          label: files.length > 1 ? `Spremno — ${files.length} fajla` : "Spremno ✦",
+          files,
+          base,
+        });
+        logEvent("ok", "Izvoz spreman za čuvanje", `Tapni „Sačuvaj u Photos" da ${files.length > 1 ? "sačuvaš sve u galeriju" : "sačuvaš u galeriju"} (${kindTxt}).`);
+      } else {
+        await downloadOutputs(files, base);
+        setExportUI({ pct: 100, label: files.length > 1 ? `${files.length} fajla preuzeto ✦` : "Preuzeto ✦" });
+        logEvent("ok", "Izvezeno", files.length > 1 ? `${kindTxt} — preuzeto (${files.length > 1 ? ".zip" : ""}).` : `${files[0].name} preuzeto na uređaj.`);
+      }
+
       persistProject({ ...proj, updatedAt: new Date().toISOString() }).catch(() => {});
     } catch (err) {
       console.error("export", err);
@@ -478,7 +536,7 @@ export default function Studio() {
           /* ignore */
         }
       });
-      setTimeout(() => setExportUI(null), 2800);
+      if (!awaitingShare) setTimeout(() => setExportUI(null), 2800);
     }
   }
 
@@ -2322,15 +2380,20 @@ export default function Studio() {
 
       {/* Progress preklop tokom izvoza */}
       {exportUI && (
-        <div className="export-overlay">
-          <div className={`export-card${exportUI.error ? " err" : ""}`}>
+        <div
+          className="export-overlay"
+          onClick={exportUI.files || exportUI.error ? () => setExportUI(null) : undefined}
+        >
+          <div className={`export-card${exportUI.error ? " err" : ""}`} onClick={(e) => e.stopPropagation()}>
             <div className="export-spin" aria-hidden>
               {exportUI.pct >= 100 ? (exportUI.error ? "!" : "✓") : <I.Sparkle />}
             </div>
             <b>{exportUI.label}</b>
-            <div className="export-bar">
-              <span style={{ width: `${Math.max(6, Math.min(100, exportUI.pct))}%` }} />
-            </div>
+            {!exportUI.files && (
+              <div className="export-bar">
+                <span style={{ width: `${Math.max(6, Math.min(100, exportUI.pct))}%` }} />
+              </div>
+            )}
             {exportUI.error ? (
               <button
                 className="btn btn-outline"
@@ -2342,6 +2405,27 @@ export default function Studio() {
               >
                 <I.Journal style={{ width: 16, height: 16 }} /> Vidi dnevnik
               </button>
+            ) : exportUI.files && exportUI.files.length > 0 ? (
+              <>
+                <p className="export-hint" style={{ marginTop: 2, marginBottom: 12 }}>
+                  {exportUI.files.length > 1
+                    ? "Tapni da sačuvaš sve u Photos (galeriju)."
+                    : "Tapni da sačuvaš u Photos (galeriju)."}
+                </p>
+                <button className="btn btn-primary" style={{ width: "100%", height: 46 }} onClick={shareExport}>
+                  <I.Export style={{ width: 17, height: 17 }} /> Sačuvaj u Photos
+                </button>
+                <button
+                  className="btn btn-text"
+                  style={{ marginTop: 8 }}
+                  onClick={async () => {
+                    await downloadOutputs(exportUI.files!, exportUI.base || "objava");
+                    setExportUI(null);
+                  }}
+                >
+                  ili preuzmi na uređaj
+                </button>
+              </>
             ) : (
               <p className="export-hint">Fajl se preuzima na uređaj.</p>
             )}
