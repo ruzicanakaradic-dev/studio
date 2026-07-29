@@ -430,6 +430,19 @@ textarea.txt-in{min-height:64px;line-height:1.4}
 .auto-card p{font-size:12px;color:var(--muted);line-height:1.45}
 .test-box{margin-top:14px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.6;white-space:pre-line}
 
+/* ---- Platno: tool rail ---- */
+.tool-rail{width:76px;flex:0 0 76px;background:var(--cream-2);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 8px}
+.tool-btn{width:60px;height:60px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:5px;font-size:9px;font-weight:800;letter-spacing:.04em;color:var(--muted);background:transparent;transition:.14s;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.tool-btn svg{width:20px;height:20px}
+.tool-btn:hover{background:var(--lav-soft)}
+.tool-btn.on{background:var(--ink);color:#fff}
+.tool-btn.on svg{color:#fff}
+.tool-btn.ai.on{background:var(--plum)}
+.red-thumb{width:34px;height:44px;border-radius:6px;overflow:hidden;background:var(--lav-soft);flex:0 0 34px}
+.red-thumb img{width:100%;height:100%;object-fit:cover}
+
 /* ---- Nova objava ---- */
 .nova{display:flex;flex-direction:column;flex:1;min-height:0}
 .nova-top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 28px;border-bottom:1px solid var(--line);flex-wrap:wrap}
@@ -463,6 +476,7 @@ textarea.txt-in{min-height:64px;line-height:1.4}
   .nova-photos,.nova-text{border:none;border-bottom:1px solid var(--line)}
   .nova-top{padding:14px 16px}
   .np-grid{grid-template-columns:1fr 1fr 1fr}
+  .tool-rail{display:none}
   .sidebar2{display:none}
   .screen-scroll{padding:20px 16px 84px}
   .page-title{font-size:26px}

@@ -68,7 +68,7 @@ export default function Studio() {
   const [newOpen, setNewOpen] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [active, setActive] = useState(0);
-  const [propTab, setPropTab] = useState<"text" | "cta" | "layer" | "ai">("text");
+  const [propTab, setPropTab] = useState<"foto" | "text" | "cta" | "layer" | "brend" | "red" | "ai">("text");
   const [sheet, setSheet] = useState<null | "media" | "props">(null);
   const [selId, setSelId] = useState<string | null>(null); // text layer id, "cta", or null
   const [toast, setToast] = useState<string | null>(null);
@@ -1075,51 +1075,30 @@ export default function Studio() {
             <div className="ed-body">
               <div className={`sheet-backdrop${sheet ? " on" : ""}`} onClick={() => setSheet(null)} />
 
-              {/* LEFT: media */}
-              <aside className={`panel panel-l${sheet === "media" ? " open" : ""}`}>
-                <div className="panel-h">
-                  Mediji
-                  <button className="sheet-close" onClick={() => setSheet(null)}>
-                    <I.Close />
+              {/* LEFT: tool rail */}
+              <nav className="tool-rail">
+                {(
+                  [
+                    ["foto", "FOTO", I.ImgIcon],
+                    ["text", "TEKST", I.TextIcon],
+                    ["brend", "BREND", I.Brand],
+                    ["red", "RED", I.Layers],
+                    ["ai", "AI", I.Sparkle],
+                  ] as [typeof propTab, string, React.FC<React.SVGProps<SVGSVGElement>>][]
+                ).map(([key, label, Ico]) => (
+                  <button
+                    key={key}
+                    className={`tool-btn${propTab === key ? " on" : ""}${key === "ai" ? " ai" : ""}`}
+                    onClick={() => {
+                      setPropTab(key);
+                      if (window.innerWidth <= 760) setSheet("props");
+                    }}
+                  >
+                    <Ico />
+                    {label}
                   </button>
-                </div>
-                <div className="media-tabs">
-                  <button className={`chip${mediaType === "image" ? " on" : ""}`} onClick={() => setMediaType("image")}>
-                    Slike
-                  </button>
-                  <button className={`chip${mediaType === "video" ? " on" : ""}`} onClick={() => setMediaType("video")}>
-                    Video
-                  </button>
-                </div>
-                <div className="panel-scroll">
-                  <div className="media-grid">
-                    {media
-                      .filter((m) => m.kind === mediaType)
-                      .map((m) => (
-                        <button
-                          key={m.id}
-                          className={`media-tile${slide.mediaId === m.id ? " sel" : ""}`}
-                          onClick={() => pickMedia(m.id)}
-                        >
-                          <img src={m.url} alt={m.name} />
-                          {m.kind === "video" && (
-                            <span className="vtag">
-                              <I.Play />
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                    <button className="upload-tile" onClick={() => fileRef.current?.click()}>
-                      <I.Upload />
-                      Otpremi svoju
-                    </button>
-                  </div>
-                  <input ref={fileRef} type="file" accept="image/*,video/*" hidden onChange={onUpload} />
-                  <p className="hint" style={{ marginTop: 14 }}>
-                    <I.Info /> Klikni na sliku da je dodaš na platno. Više strana/slajdova dodaješ ispod platna.
-                  </p>
-                </div>
-              </aside>
+                ))}
+              </nav>
 
               {/* CENTER: stage */}
               <div className="stage">
@@ -1330,21 +1309,103 @@ export default function Studio() {
                     <I.Close />
                   </button>
                 </div>
-                <div className="tabs">
-                  <button className={propTab === "text" ? "on" : ""} onClick={() => setPropTab("text")}>
-                    <I.TextIcon /> Tekst
-                  </button>
-                  <button className={propTab === "cta" ? "on" : ""} onClick={() => setPropTab("cta")}>
-                    <I.CtaIcon /> CTA
-                  </button>
-                  <button className={propTab === "layer" ? "on" : ""} onClick={() => setPropTab("layer")}>
-                    <I.Layers /> Sloj
-                  </button>
-                  <button className={`ai-tab${propTab === "ai" ? " on" : ""}`} onClick={() => setPropTab("ai")}>
-                    <I.Sparkle /> AI
-                  </button>
-                </div>
                 <div className="panel-scroll">
+                  {/* ---- FOTO (media + slika) ---- */}
+                  {propTab === "foto" && (
+                    <>
+                      <div className="media-tabs" style={{ padding: "0 0 12px" }}>
+                        <button className={`chip${mediaType === "image" ? " on" : ""}`} onClick={() => setMediaType("image")}>
+                          Slike
+                        </button>
+                        <button className={`chip${mediaType === "video" ? " on" : ""}`} onClick={() => setMediaType("video")}>
+                          Video
+                        </button>
+                      </div>
+                      <div className="media-grid">
+                        {media
+                          .filter((m) => m.kind === mediaType)
+                          .map((m) => (
+                            <button key={m.id} className={`media-tile${slide.mediaId === m.id ? " sel" : ""}`} onClick={() => pickMedia(m.id)}>
+                              <img src={m.url} alt={m.name} />
+                              {m.kind === "video" && (
+                                <span className="vtag">
+                                  <I.Play />
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        <button className="upload-tile" onClick={() => fileRef.current?.click()}>
+                          <I.Upload />
+                          Otpremi svoju
+                        </button>
+                      </div>
+                      <input ref={fileRef} type="file" accept="image/*,video/*" hidden onChange={onUpload} />
+                      <div className="divide" />
+                    </>
+                  )}
+
+                  {/* ---- BREND (font/boje se menjaju u Brendu) ---- */}
+                  {propTab === "brend" && (
+                    <>
+                      <div className="field">
+                        <label>Font naslova</label>
+                        <div className="txt-in" style={{ display: "flex", alignItems: "center" }}>
+                          {FONTS.find((f) => f.key === brand.headingFont)?.label} · 500
+                        </div>
+                        <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.5 }}>
+                          Font, boje i ton se menjaju u <b>Brendu</b> — važi za sve objave.
+                        </p>
+                      </div>
+                      <button className="btn btn-outline" style={{ width: "100%" }} onClick={() => setView("brend")}>
+                        Otvori Brend
+                      </button>
+                    </>
+                  )}
+
+                  {/* ---- RED (slajdovi/strane) ---- */}
+                  {propTab === "red" && (
+                    <>
+                      {fmt.multi ? (
+                        <>
+                          <button className="btn btn-primary" style={{ width: "100%", marginBottom: 14 }} onClick={addSlide}>
+                            <I.Plus /> Dodaj {fmt.slideLabel.toLowerCase()}
+                          </button>
+                          <div className="field">
+                            <label>{fmt.slideLabel} ({project.slides.length})</label>
+                            {project.slides.map((sl, i) => {
+                              const u = mediaUrl(sl.mediaId);
+                              return (
+                                <div key={sl.id} className={`layer-item${i === active ? " on" : ""}`} onClick={() => { setActive(i); setSelId(null); }}>
+                                  <span className="red-thumb">{u ? <img src={u} alt="" /> : null}</span>
+                                  <span className="layer-name">
+                                    {fmt.slideLabel} {i + 1}
+                                  </span>
+                                  {project.slides.length > 1 && (
+                                    <button
+                                      className="layer-del"
+                                      title="Obriši"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActive(i);
+                                        setTimeout(deleteSlide, 0);
+                                      }}
+                                    >
+                                      <I.Trash />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="hint">
+                          <I.Info /> Ovaj format ({fmt.short}) ima jednu stranu. Story, Reels i Carousel dozvoljavaju više.
+                        </p>
+                      )}
+                    </>
+                  )}
+
                   {/* ---- TEXT ---- */}
                   {propTab === "text" && (
                     <>
@@ -1489,9 +1550,13 @@ export default function Studio() {
                     </>
                   )}
 
-                  {/* ---- CTA ---- */}
-                  {propTab === "cta" && (
+                  {/* ---- CTA (u okviru Teksta) ---- */}
+                  {propTab === "text" && (
                     <>
+                      <div className="divide" />
+                      <div className="mono-label" style={{ margin: "0 0 12px" }}>
+                        CTA dugme
+                      </div>
                       <div className="toggle-row">
                         <b>Prikaži CTA dugme</b>
                         <button className={`switch${slide.cta ? " on" : ""}`} onClick={() => patchSlide({ cta: !slide.cta })}>
@@ -1535,8 +1600,8 @@ export default function Studio() {
                     </>
                   )}
 
-                  {/* ---- LAYER ---- */}
-                  {propTab === "layer" && (
+                  {/* ---- SLIKA (u okviru Foto) ---- */}
+                  {propTab === "foto" && slide.mediaId && (
                     <>
                       <div className="field">
                         <label>Zum slike</label>
@@ -1732,8 +1797,13 @@ export default function Studio() {
 
             {/* MOBILE toolbar */}
             <nav className="mtoolbar">
-              <button className={sheet === "media" ? "on" : ""} onClick={() => setSheet("media")}>
-                <I.ImgIcon /> Mediji
+              <button
+                onClick={() => {
+                  setPropTab("foto");
+                  setSheet("props");
+                }}
+              >
+                <I.ImgIcon /> Foto
               </button>
               <button
                 onClick={() => {
@@ -1751,19 +1821,19 @@ export default function Studio() {
               </button>
               <button
                 onClick={() => {
-                  setPropTab("cta");
+                  setPropTab("red");
                   setSheet("props");
                 }}
               >
-                <I.CtaIcon /> CTA
+                <I.Layers /> Red
               </button>
               <button
                 onClick={() => {
-                  setPropTab("layer");
+                  setPropTab("ai");
                   setSheet("props");
                 }}
               >
-                <I.Layers /> Sloj
+                <I.Sparkle /> AI
               </button>
             </nav>
           </div>
