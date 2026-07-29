@@ -36,6 +36,7 @@ import {
   toCaptureUrl,
   type ReelsSegment,
 } from "@/lib/exporter";
+import { logEvent, getLog, subscribeLog, clearLog, formatWhen, type LogEntry } from "@/lib/logbook";
 
 const FMT_ICON: Record<Format, React.FC<React.SVGProps<SVGSVGElement>>> = {
   post: I.FmtPost,
@@ -51,6 +52,7 @@ const NAV = [
   { key: "platno", label: "Platno", short: "Platno", note: "editor", icon: I.ImgIcon },
   { key: "brend", label: "Brend", short: "Brend", note: "logo, boje, fontovi", icon: I.Brand },
   { key: "ai", label: "AI", short: "AI", note: "podešavanja", icon: I.Sparkle },
+  { key: "log", label: "Dnevnik", short: "Dnevnik", note: "šta se dešavalo", icon: I.Journal },
 ] as const;
 
 const WEEK: { day: string; title: string; status?: string; plum?: boolean }[] = [
@@ -76,7 +78,8 @@ function relTime(iso: string): string {
 }
 
 export default function Studio() {
-  const [view, setView] = useState<"studio" | "objave" | "nova" | "brend" | "ai" | "editor">("studio");
+  const [view, setView] = useState<"studio" | "objave" | "nova" | "brend" | "ai" | "editor" | "log">("studio");
+  const [logItems, setLogItems] = useState<LogEntry[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [mediaType, setMediaType] = useState<"image" | "video">("image");
@@ -166,6 +169,12 @@ export default function Studio() {
     setVidPlaying(false);
   }, [active, slide?.mediaId]);
 
+  // dnevnik (log) — osveži prikaz kad stigne nov događaj
+  useEffect(() => {
+    setLogItems(getLog());
+    return subscribeLog(() => setLogItems([...getLog()]));
+  }, []);
+
   const patchSlide = useCallback(
     (patch: Partial<Slide>) => {
       setProject((p) => {
@@ -241,7 +250,7 @@ export default function Studio() {
       else setView("nova");
       return;
     }
-    setView(k as "studio" | "objave" | "brend" | "ai" | "nova");
+    setView(k as "studio" | "objave" | "brend" | "ai" | "nova" | "log");
   }
   function togglePhoto(id: string) {
     setNovaPhotos((ps) => (ps.includes(id) ? ps.filter((x) => x !== id) : [...ps, id]));
@@ -329,6 +338,8 @@ export default function Studio() {
     const hasVideo = items.some((it) => it.video);
     const isReels = proj.format === "reels";
 
+    logEvent("info", `Počeo izvoz objave „${proj.name}"`, `Format: ${fmt.short} · ${items.length} ${items.length === 1 ? "medij" : "medija"}${hasVideo ? " (ima videa)" : ""}.`);
+
     // izmeri trenutno platno da izvoz bude 1:1 sa onim što se vidi
     const rect = canvasRef.current?.getBoundingClientRect();
     const width = Math.round(rect?.width || 440);
@@ -338,10 +349,16 @@ export default function Studio() {
 
     // učitaj medije lokalno (blob) da sigurno uđu u izvoz (bez CORS/keš-taint problema)
     const objectUrls: string[] = [];
+    let loadFails = 0;
     for (const it of items) {
-      const safe = await toCaptureUrl(mediaUrl(it.slide.mediaId));
+      const orig = mediaUrl(it.slide.mediaId);
+      const safe = await toCaptureUrl(orig);
+      if (orig && !orig.startsWith("/") && (!safe || !safe.startsWith("blob:"))) loadFails += 1;
       it.src = safe;
       if (safe && safe.startsWith("blob:")) objectUrls.push(safe);
+    }
+    if (loadFails > 0) {
+      logEvent("warn", "Neke slike se nisu učitale za izvoz", `${loadFails} ${loadFails === 1 ? "medij nije uspeo" : "medija nije uspelo"} da se pripremi — možda internet ili medij nije dostupan. Pokušavam i dalje.`);
     }
 
     setExportJob({ items, project: proj, width });
@@ -371,6 +388,12 @@ export default function Studio() {
         setExportUI({ pct: Math.round((done / total) * (isReels || hasVideo ? 30 : 100)), label: `Spremam kadrove… ${done}/${total}` }),
       );
 
+      const capOk = capBlobs.filter(Boolean).length;
+      if (capOk === 0) {
+        throw new Error("nijedan-kadar");
+      }
+      logEvent("info", "Slike pripremljene", `Spremno ${capOk}/${capBlobs.length}.`);
+
       if (isReels) {
         // montaža: slike stoje, video slajdovi se puštaju — jedan .mp4
         let ok = false;
@@ -382,26 +405,34 @@ export default function Studio() {
                 ? {
                     kind: "video",
                     url: (it.src || mediaUrl(it.slide.mediaId))!,
-                    imgBlob: slideHasOverlay(it.slide) ? capBlobs[i] : undefined,
+                    imgBlob: slideHasOverlay(it.slide) ? capBlobs[i] ?? undefined : undefined,
                     zoom: it.slide.zoom,
                     focus: it.slide.focus,
                   }
-                : { kind: "still", imgBlob: capBlobs[i] },
+                : { kind: "still", imgBlob: capBlobs[i] ?? undefined },
             );
             const { blob, ext } = await exportReelsMontage(segments, proj.transition, (p) =>
               setExportUI({ pct: 35 + Math.round(p * 60), label: "Snimam video…" }),
             );
             downloadBlob(blob, `${base}.${ext}`);
             setExportUI({ pct: 100, label: `Reels spreman ✦ (.${ext})` });
+            logEvent("ok", `Reels izvezen — ${base}.${ext}`, "Video je preuzet na uređaj.");
             ok = true;
           } catch (e) {
+            logEvent("warn", "Snimanje videa nije uspelo", "Umesto videa sačuvao sam pojedinačne kadrove (slike) u .zip-u.");
             console.warn("reels montage fallback", e);
           }
+        } else {
+          logEvent("warn", "Ovaj pregledač ne podržava snimanje videa", "Umesto videa čuvam kadrove kao slike.");
         }
         if (!ok) {
-          const zip = await zipMixed(capBlobs.map((b, i) => ({ name: `${base}-${i + 1}.png`, blob: b })));
+          const frames = capBlobs
+            .map((b, i) => (b ? { name: `${base}-${i + 1}.png`, blob: b } : null))
+            .filter((x): x is { name: string; blob: Blob } => !!x);
+          const zip = await zipMixed(frames);
           downloadBlob(zip, `${base}-reels-kadrovi.zip`);
           setExportUI({ pct: 100, label: "Video nije podržan — sačuvani kadrovi (.zip)." });
+          logEvent("ok", `Kadrovi izvezeni — ${base}-reels-kadrovi.zip`, `${frames.length} slika preuzeto na uređaj.`);
         }
       } else {
         // Objava / Story / Carousel — po slajdu: slika → PNG, video → MP4/WebM
@@ -410,7 +441,8 @@ export default function Studio() {
           const it = items[i];
           const nm = items.length === 1 ? base : `${base}-${i + 1}`;
           if (!it.video) {
-            outputs.push({ name: `${nm}.png`, blob: capBlobs[i] });
+            if (capBlobs[i]) outputs.push({ name: `${nm}.png`, blob: capBlobs[i]! });
+            else logEvent("warn", `Slajd ${i + 1} preskočen`, "Sliku nije bilo moguće pripremiti za izvoz.");
           } else {
             setExportUI({ pct: 30 + Math.round((i / items.length) * 60), label: `Snimam video ${i + 1}/${items.length}…` });
             try {
@@ -433,30 +465,41 @@ export default function Studio() {
                 const url = (it.src || mediaUrl(it.slide.mediaId))!;
                 const r = await fetch(url, { mode: "cors" });
                 const blob = await r.blob();
-                const m = url.match(/\.(mp4|mov|webm|m4v)(\?|#|$)/i);
+                const m = mediaUrl(it.slide.mediaId)?.match(/\.(mp4|mov|webm|m4v)(\?|#|$)/i);
                 outputs.push({ name: `${nm}.${(m?.[1] || "mp4").toLowerCase()}`, blob });
+                logEvent("warn", `Tekst nije uklopljen na video (slajd ${i + 1})`, "Sačuvao sam originalni video bez teksta preko njega.");
               } catch {
-                outputs.push({ name: `${nm}.png`, blob: capBlobs[i] });
+                if (capBlobs[i]) outputs.push({ name: `${nm}.png`, blob: capBlobs[i]! });
               }
             }
           }
         }
 
-        if (outputs.length === 1) {
+        if (outputs.length === 0) {
+          throw new Error("nema-izlaza");
+        } else if (outputs.length === 1) {
           downloadBlob(outputs[0].blob, outputs[0].name);
           setExportUI({ pct: 100, label: outputs[0].name.endsWith(".png") ? "Slika spremna ✦" : "Video spreman ✦" });
+          logEvent("ok", `Izvezeno — ${outputs[0].name}`, "Fajl je preuzet na uređaj.");
         } else {
           const zip = await zipMixed(outputs);
           downloadBlob(zip, `${base}.zip`);
           const nImg = outputs.filter((o) => o.name.endsWith(".png")).length;
           const nVid = outputs.length - nImg;
           setExportUI({ pct: 100, label: `${nImg} slika${nVid ? ` + ${nVid} video` : ""} u .zip ✦` });
+          logEvent("ok", `Izvezeno — ${base}.zip`, `${nImg} ${nImg === 1 ? "slika" : "slika"}${nVid ? ` + ${nVid} video` : ""}, numerisano po redu. Preuzeto na uređaj.`);
         }
       }
       persistProject({ ...proj, updatedAt: new Date().toISOString() }).catch(() => {});
     } catch (err) {
       console.error("export", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      const friendly =
+        msg === "nijedan-kadar" || msg === "nema-izlaza"
+          ? "Nisam uspeo da pripremim nijednu sliku — proveri da li se medij vidi na platnu i da imaš internet."
+          : "Nešto je zapelo pri izvozu. Proveri internet i pokušaj ponovo.";
       setExportUI({ pct: 100, label: "Izvoz nije uspeo. Pokušaj ponovo.", error: true });
+      logEvent("error", "Izvoz nije uspeo", `${friendly} (tehnički: ${msg})`);
     } finally {
       objectUrls.forEach((u) => {
         try {
@@ -546,8 +589,10 @@ export default function Studio() {
       setMedia((m) => [item, ...m]);
       patchSlide({ mediaId: item.id });
       showToast("Otpremljeno");
+      logEvent("ok", `Dodat ${item.kind === "video" ? "video" : "slika"} — ${item.name}`, "Medij je otpremljen i dodat na platno.");
     } else {
       showToast("Upload radi kad se poveže Supabase Storage");
+      logEvent("warn", "Otpremanje nije uspelo", "Medij nije otpremljen — proveri vezu sa skladištem (Supabase).");
     }
     e.target.value = "";
   }
@@ -579,6 +624,7 @@ export default function Studio() {
     setProjects((list) => list.filter((p) => p.id !== id));
     await deleteProject(id);
     showToast("Projekat obrisan");
+    logEvent("info", `Obrisana objava — „${name}"`, "Objava je uklonjena iz Studija.");
   }
 
   // ---- preview ----
@@ -1364,6 +1410,41 @@ export default function Studio() {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ---------- DNEVNIK (LOG) ---------- */}
+          {view === "log" && (
+            <div className="screen-scroll home">
+              <div className="home-head">
+                <div>
+                  <h1 className="page-title">Dnevnik</h1>
+                  <p className="page-sub">Šta se dešavalo u Studiju — jednostavno, bez tehničkih izraza.</p>
+                </div>
+                {logItems.length > 0 && (
+                  <button className="btn btn-outline" onClick={() => clearLog()}>
+                    Obriši dnevnik
+                  </button>
+                )}
+              </div>
+              {logItems.length === 0 ? (
+                <div className="posts-empty">Još nema zabeleženih događaja. Kad izvezeš objavu, ovde piše šta se desilo.</div>
+              ) : (
+                <div className="log-list">
+                  {logItems.map((e) => (
+                    <div key={e.id} className={`log-row log-${e.kind}`}>
+                      <span className="log-ico" aria-hidden>
+                        {e.kind === "ok" ? <I.Check /> : e.kind === "error" ? "!" : e.kind === "warn" ? "!" : <I.Info />}
+                      </span>
+                      <div className="log-body">
+                        <b>{e.title}</b>
+                        {e.detail && <p>{e.detail}</p>}
+                        <span className="log-when">{formatWhen(e.t)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -2215,7 +2296,7 @@ export default function Studio() {
       </div>
 
       {/* ===== MOBILE BOTTOM TABS ===== */}
-      <nav className="btabs">
+      <nav className="btabs" style={{ gridTemplateColumns: `repeat(${NAV.length}, 1fr)` }}>
         {NAV.map((n) => {
           const Ico = n.icon;
           const active = view === n.key || (n.key === "platno" && view === "editor");
@@ -2311,7 +2392,20 @@ export default function Studio() {
             <div className="export-bar">
               <span style={{ width: `${Math.max(6, Math.min(100, exportUI.pct))}%` }} />
             </div>
-            <p className="export-hint">Fajl se preuzima na uređaj.</p>
+            {exportUI.error ? (
+              <button
+                className="btn btn-outline"
+                style={{ marginTop: 14, height: 40 }}
+                onClick={() => {
+                  setExportUI(null);
+                  setView("log");
+                }}
+              >
+                <I.Journal style={{ width: 16, height: 16 }} /> Vidi dnevnik
+              </button>
+            ) : (
+              <p className="export-hint">Fajl se preuzima na uređaj.</p>
+            )}
           </div>
         </div>
       )}

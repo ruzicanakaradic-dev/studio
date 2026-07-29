@@ -159,12 +159,16 @@ export async function captureNodes(
   nodes: HTMLElement[],
   pixelRatio: number,
   onStep?: (done: number, total: number) => void,
-): Promise<Blob[]> {
+): Promise<(Blob | null)[]> {
   const fontEmbedCSS = nodes[0] ? await getFontEmbedCSS(nodes[0]).catch(() => undefined) : undefined;
   if (nodes[0]) await toBlob(nodes[0], { pixelRatio: 0.3, fontEmbedCSS, cacheBust: true }).catch(() => null);
-  const blobs: Blob[] = [];
+  const blobs: (Blob | null)[] = [];
   for (let i = 0; i < nodes.length; i++) {
-    blobs.push(await nodeToBlob(nodes[i], pixelRatio, fontEmbedCSS));
+    try {
+      blobs.push(await nodeToBlob(nodes[i], pixelRatio, fontEmbedCSS));
+    } catch {
+      blobs.push(null); // jedan neuspeh ne ruši ceo izvoz
+    }
     onStep?.(i + 1, nodes.length);
   }
   return blobs;

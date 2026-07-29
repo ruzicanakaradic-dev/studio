@@ -146,6 +146,12 @@ export const Frame = (p: SVGProps<SVGSVGElement>) => (
     <rect x="4" y="4" width="16" height="16" rx="2" />
   </svg>
 );
+export const Journal = (p: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </svg>
+);
 export const AlignLeft = (p: SVGProps<SVGSVGElement>) => (
   <svg {...s(p)}>
     <path d="M3 6h18M3 12h12M3 18h15" />
