@@ -829,7 +829,7 @@ export default function Studio() {
                   </div>
                   <div className="preview-cap">
                     <b>ruzini_domaci_kolaci</b>
-                    <p>Tanka korica, mnogo krema, bez šećerne glazure. Piši nam do petka. Sveže rađeno samo za Vas.</p>
+                    <p>Tanka korica, mnogo krema, bez šećerne glazure. Piši nam do petka. Sveže rađeno samo za tebe.</p>
                   </div>
                 </div>
                 <p className="mono-label" style={{ marginTop: 14, lineHeight: 1.5, letterSpacing: ".08em" }}>

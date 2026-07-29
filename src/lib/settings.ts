@@ -38,7 +38,7 @@ export const DEFAULT_BRAND: BrandProfile = {
   bodyFont: "archivo",
   toneChips: ["toplo", "kratko", 'na „ti"', "bez uzvičnika", "domaćinski", "bez marketinga"],
   toneText:
-    'Piši kao domaćica koja voli svoj posao. Kratko, na „ti", bez marketinga i bez uzvičnika. Potpis na kraju: „Sveže rađeno samo za Vas."',
+    'Piši kao domaćica koja voli svoj posao. Kratko, na „ti", bez marketinga i bez uzvičnika. Potpis na kraju: „Sveže rađeno samo za tebe."',
   bannedWords: ["akcija!!!", "najbolji u gradu", "poručite već danas", "HIT"],
   hashtagSets: [
     { name: "Svakodnevno", tags: "#domaćikolači #ružinikolači #svežerađeno" },
@@ -68,11 +68,17 @@ export const PALETTE = [
 const BRAND_KEY = "ruzini_brand";
 const AI_KEY = "ruzini_ai";
 
+const OLD_TONE_FORMAL =
+  'Piši kao domaćica koja voli svoj posao. Kratko, na „ti", bez marketinga i bez uzvičnika. Potpis na kraju: „Sveže rađeno samo za Vas."';
+
 export function loadBrand(): BrandProfile {
   if (typeof window === "undefined") return DEFAULT_BRAND;
   try {
     const raw = localStorage.getItem(BRAND_KEY);
-    return raw ? { ...DEFAULT_BRAND, ...JSON.parse(raw) } : DEFAULT_BRAND;
+    const b: BrandProfile = raw ? { ...DEFAULT_BRAND, ...JSON.parse(raw) } : DEFAULT_BRAND;
+    // migracija: stari formalni potpis („za Vas") → „za tebe" (uskladi sa tonom „na ti")
+    if (b.toneText === OLD_TONE_FORMAL) b.toneText = DEFAULT_BRAND.toneText;
+    return b;
   } catch {
     return DEFAULT_BRAND;
   }
