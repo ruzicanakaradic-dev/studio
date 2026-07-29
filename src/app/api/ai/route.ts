@@ -162,20 +162,18 @@ export async function POST(req: Request) {
   const sys = buildSystem(body.brand);
 
   if (geminiKey) {
-    const models = [
-      GEMINI_MODEL,
-      "gemini-flash-lite-latest",
-      "gemini-2.0-flash-lite",
-      "gemini-2.0-flash",
-      "gemini-3-flash-preview",
-    ].filter((m, i, a) => a.indexOf(m) === i);
+    // Jedan poziv po akciji da ne trošimo minutni limit (RPM). Jedna rezerva samo ako prvi 404-uje.
+    const models = [GEMINI_MODEL, "gemini-3-flash"].filter((m, i, a) => a.indexOf(m) === i);
     const tried: string[] = [];
     for (const m of models) {
       try {
         const out = await callGemini(geminiKey, m, sys, user);
         return Response.json({ ...(out as object), _via: m, _skipped: tried });
       } catch (e) {
-        tried.push(`[${m}] ${(e as Error).message || String(e)}`);
+        const msg = (e as Error).message || String(e);
+        tried.push(`[${m}] ${msg}`);
+        // na 429/kvotu ne probavaj druge modele (da ne trošiš minutni limit)
+        if (/429|quota|RESOURCE_EXHAUSTED/i.test(msg)) break;
       }
     }
     console.error("Gemini error", tried.join(" | "));
