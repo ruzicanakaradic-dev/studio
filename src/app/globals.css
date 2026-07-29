@@ -544,5 +544,20 @@ textarea.txt-in{min-height:64px;line-height:1.4}
   opacity:0;transition:.15s;z-index:2}
 .card-del svg{width:15px;height:15px}
 .card-del:hover{background:#B4453E}
-.card:hover .card-del,.post-tile:hover .card-del{opacity:1}
+.card:hover .card-del{opacity:1}
+/* trash je uvek vidljiv na svakoj objavi */
+.post-tile .card-del{opacity:1;background:rgba(42,32,51,.62)}
+.post-tile:hover .card-del{background:rgba(42,32,51,.78)}
+.post-tile .card-del:hover{background:#B4453E}
 @media(max-width:860px){ .card-del{opacity:1;background:rgba(42,32,51,.62)} }
+
+/* ===== Filter bar (tip + vreme) ===== */
+.filter-bar{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 4px;align-items:center}
+.filter-seg{display:inline-flex;gap:4px;padding:4px;background:var(--cream-2);border:1px solid var(--line);border-radius:999px}
+.filter-chip{border:0;background:transparent;color:var(--ink-soft,#6b5f73);font-size:12.5px;font-weight:600;
+  padding:6px 13px;border-radius:999px;cursor:pointer;transition:.15s;white-space:nowrap}
+.filter-chip:hover{color:var(--ink,#2B2130)}
+.filter-chip.on{background:var(--plum,#63347A);color:#fff}
+.posts-empty{margin-top:18px;padding:34px 18px;text-align:center;color:var(--ink-soft,#6b5f73);
+  font-size:14px;border:1px dashed var(--line);border-radius:14px;background:var(--cream-2)}
+@media(max-width:860px){ .filter-seg{flex:1;justify-content:center} .filter-chip{padding:7px 10px} }

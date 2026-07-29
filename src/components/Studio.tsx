@@ -68,6 +68,7 @@ export default function Studio() {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [mediaType, setMediaType] = useState<"image" | "video">("image");
   const [filter, setFilter] = useState<"all" | Format>("all");
+  const [timeFilter, setTimeFilter] = useState<"all" | "24h" | "7d" | "30d">("all");
   const [newOpen, setNewOpen] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [active, setActive] = useState(0);
@@ -517,7 +518,35 @@ export default function Studio() {
     if (d?.content) setAiTest(d.content);
   }
 
-  const filtered = filter === "all" ? projects : projects.filter((p) => p.format === filter);
+  // vidljive objave: filter po tipu + vremenu, pa hronološki (najnovije prvo)
+  const timeCut =
+    timeFilter === "24h" ? 864e5 : timeFilter === "7d" ? 6048e5 : timeFilter === "30d" ? 2592e6 : Infinity;
+  const nowMs = Date.now();
+  const visibleProjects = projects
+    .filter((p) => (filter === "all" ? true : p.format === filter))
+    .filter((p) => {
+      const t = new Date(p.updatedAt).getTime();
+      if (Number.isNaN(t)) return true;
+      return nowMs - t <= timeCut;
+    })
+    .sort((a, b) => {
+      const ta = new Date(a.updatedAt).getTime() || 0;
+      const tb = new Date(b.updatedAt).getTime() || 0;
+      return tb - ta;
+    });
+  const TIME_FILTERS: { key: "all" | "24h" | "7d" | "30d"; label: string }[] = [
+    { key: "all", label: "Sve" },
+    { key: "24h", label: "24h" },
+    { key: "7d", label: "7 dana" },
+    { key: "30d", label: "Mesec" },
+  ];
+  const TYPE_FILTERS: { key: "all" | Format; label: string }[] = [
+    { key: "all", label: "Svi tipovi" },
+    { key: "post", label: FORMAT_META.post.short },
+    { key: "story", label: FORMAT_META.story.short },
+    { key: "reels", label: FORMAT_META.reels.short },
+    { key: "carousel", label: FORMAT_META.carousel.short },
+  ];
   const textAnimStyle = (delay: number): React.CSSProperties =>
     previewing && project && project.textAnim !== "none"
       ? { animation: `${project.textAnim === "rise" ? "fxRise" : "fxFade"} .55s ease ${delay}s both` }
@@ -616,24 +645,52 @@ export default function Studio() {
               <div className="mono-label" style={{ marginTop: 30 }}>
                 Poslednje objave
               </div>
-              <div className="posts-grid">
-                {projects.map((p) => {
-                  const url = mediaUrl(p.coverMediaId);
-                  const Ico = FMT_ICON[p.format];
-                  return (
-                    <div key={p.id} className="post-tile" role="button" tabIndex={0} onClick={() => openEditor(p)}>
-                      {url && <img src={url} alt="" />}
-                      <span className="post-badge">
-                        <Ico /> {FORMAT_META[p.format].short}
-                      </span>
-                      <button className="card-del" title="Obriši" onClick={(e) => removeProject(e, p.id, p.name)}>
-                        <I.Trash />
-                      </button>
-                      <span className="post-name">{p.name}</span>
-                    </div>
-                  );
-                })}
+              <div className="filter-bar">
+                <div className="filter-seg">
+                  {TYPE_FILTERS.map((t) => (
+                    <button
+                      key={t.key}
+                      className={`filter-chip ${filter === t.key ? "on" : ""}`}
+                      onClick={() => setFilter(t.key)}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="filter-seg">
+                  {TIME_FILTERS.map((t) => (
+                    <button
+                      key={t.key}
+                      className={`filter-chip ${timeFilter === t.key ? "on" : ""}`}
+                      onClick={() => setTimeFilter(t.key)}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+              {visibleProjects.length === 0 ? (
+                <div className="posts-empty">Nema objava za izabrani filter.</div>
+              ) : (
+                <div className="posts-grid">
+                  {visibleProjects.map((p) => {
+                    const url = mediaUrl(p.coverMediaId);
+                    const Ico = FMT_ICON[p.format];
+                    return (
+                      <div key={p.id} className="post-tile" role="button" tabIndex={0} onClick={() => openEditor(p)}>
+                        {url && <img src={url} alt="" />}
+                        <span className="post-badge">
+                          <Ico /> {FORMAT_META[p.format].short}
+                        </span>
+                        <button className="card-del" title="Obriši" onClick={(e) => removeProject(e, p.id, p.name)}>
+                          <I.Trash />
+                        </button>
+                        <span className="post-name">{p.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -649,24 +706,52 @@ export default function Studio() {
                   Nova objava <I.Arrow />
                 </button>
               </div>
-              <div className="posts-grid two">
-                {projects.map((p) => {
-                  const url = mediaUrl(p.coverMediaId);
-                  const Ico = FMT_ICON[p.format];
-                  return (
-                    <div key={p.id} className="post-tile" role="button" tabIndex={0} onClick={() => openEditor(p)}>
-                      {url && <img src={url} alt="" />}
-                      <span className="post-badge">
-                        <Ico /> {FORMAT_META[p.format].short}
-                      </span>
-                      <button className="card-del" title="Obriši" onClick={(e) => removeProject(e, p.id, p.name)}>
-                        <I.Trash />
-                      </button>
-                      <span className="post-name">{p.name}</span>
-                    </div>
-                  );
-                })}
+              <div className="filter-bar">
+                <div className="filter-seg">
+                  {TYPE_FILTERS.map((t) => (
+                    <button
+                      key={t.key}
+                      className={`filter-chip ${filter === t.key ? "on" : ""}`}
+                      onClick={() => setFilter(t.key)}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="filter-seg">
+                  {TIME_FILTERS.map((t) => (
+                    <button
+                      key={t.key}
+                      className={`filter-chip ${timeFilter === t.key ? "on" : ""}`}
+                      onClick={() => setTimeFilter(t.key)}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+              {visibleProjects.length === 0 ? (
+                <div className="posts-empty">Nema objava za izabrani filter.</div>
+              ) : (
+                <div className="posts-grid two">
+                  {visibleProjects.map((p) => {
+                    const url = mediaUrl(p.coverMediaId);
+                    const Ico = FMT_ICON[p.format];
+                    return (
+                      <div key={p.id} className="post-tile" role="button" tabIndex={0} onClick={() => openEditor(p)}>
+                        {url && <img src={url} alt="" />}
+                        <span className="post-badge">
+                          <Ico /> {FORMAT_META[p.format].short}
+                        </span>
+                        <button className="card-del" title="Obriši" onClick={(e) => removeProject(e, p.id, p.name)}>
+                          <I.Trash />
+                        </button>
+                        <span className="post-name">{p.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
