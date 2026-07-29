@@ -312,6 +312,15 @@ textarea.txt-in{min-height:64px;line-height:1.4}
 .safezone-tag{position:absolute;top:-11px;left:8px;background:var(--gold);color:var(--plum-700);
   font-size:10px;font-weight:800;letter-spacing:.4px;padding:2px 7px;border-radius:6px;text-transform:uppercase}
 
+/* AI */
+.tabs button.ai-tab.on{background:linear-gradient(135deg,var(--plum),var(--gold-600));color:#fff}
+.fmt-chip-ai{border-color:var(--gold)!important;color:var(--gold-600)}
+.fmt-chip-ai svg{color:var(--gold-600)}
+.ai-card{background:var(--paper);border:1px solid var(--lav);border-radius:14px;padding:14px;margin-top:14px}
+.ai-card-h{font-family:var(--serif);font-weight:600;font-size:15px;margin-bottom:8px;color:var(--plum)}
+.ai-card p{font-size:13px;line-height:1.5;margin:3px 0}
+.btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+
 /* lista tekstualnih slojeva */
 .layer-item{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:11px;border:1px solid var(--line);
   background:var(--paper);margin-bottom:8px;cursor:pointer;transition:.14s;color:var(--ink)}

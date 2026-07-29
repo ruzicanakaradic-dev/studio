@@ -113,6 +113,18 @@ export const Upload = (p: SVGProps<SVGSVGElement>) => (
     <path d="M20 17v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2" />
   </svg>
 );
+export const Sparkle = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...s(p)}>
+    <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3Z" />
+    <path d="M19 14l.8 2 .2.2 2 .8-2 .8-.2.2-.8 2-.8-2-.2-.2-2-.8 2-.8.2-.2.8-2Z" />
+  </svg>
+);
+export const Copy = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...s(p)}>
+    <rect x="9" y="9" width="12" height="12" rx="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+);
 export const Trash = (p: SVGProps<SVGSVGElement>) => (
   <svg {...s(p)}>
     <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />

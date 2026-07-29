@@ -36,13 +36,19 @@ export default function Studio() {
   const [newOpen, setNewOpen] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [active, setActive] = useState(0);
-  const [propTab, setPropTab] = useState<"text" | "cta" | "layer">("text");
+  const [propTab, setPropTab] = useState<"text" | "cta" | "layer" | "ai">("text");
   const [sheet, setSheet] = useState<null | "media" | "props">(null);
   const [selId, setSelId] = useState<string | null>(null); // text layer id, "cta", or null
   const [toast, setToast] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [animKey, setAnimKey] = useState(0);
   const [safeZone, setSafeZone] = useState(false);
+  const [aiIdea, setAiIdea] = useState("");
+  const [aiTone, setAiTone] = useState("Toplo i primamljivo");
+  const [aiBusy, setAiBusy] = useState<string | null>(null);
+  const [aiSuggest, setAiSuggest] = useState<{ title?: string; subtitle?: string; cta?: string } | null>(null);
+  const [aiCaption, setAiCaption] = useState<{ caption?: string; hashtags?: string[] } | null>(null);
+  const [aiMsg, setAiMsg] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -277,6 +283,104 @@ export default function Studio() {
     previewTimers.current.push(setTimeout(() => setPreviewing(false), step * n + 600));
   }
   useEffect(() => () => clearPreviewTimers(), []);
+
+  // ---- AI ----
+  async function askAI(mode: string, payload: Record<string, unknown>) {
+    setAiBusy(mode);
+    setAiMsg(null);
+    try {
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode, ...payload }),
+      });
+      const data = await res.json();
+      if (data?.error) {
+        setAiMsg("AI trenutno nije dostupan — proveri da je ANTHROPIC_API_KEY dodat u Vercel.");
+        return null;
+      }
+      if (data?.demo) setAiMsg("Demo režim — dodaj ANTHROPIC_API_KEY u Vercel za pravi AI.");
+      return data;
+    } catch {
+      setAiMsg("Greška u komunikaciji sa AI-jem.");
+      return null;
+    } finally {
+      setAiBusy(null);
+    }
+  }
+  async function copyText(t: string) {
+    try {
+      await navigator.clipboard.writeText(t);
+      showToast("Kopirano");
+    } catch {
+      showToast("Kopiranje nije uspelo");
+    }
+  }
+  async function doSuggest() {
+    if (!project) return;
+    const d = await askAI("suggest", { idea: aiIdea, format: FORMAT_META[project.format].short });
+    if (d) setAiSuggest(d);
+  }
+  function insertSuggested() {
+    if (!aiSuggest) return;
+    setProject((p) => {
+      if (!p) return p;
+      const slides = p.slides.slice();
+      const cur = { ...slides[active] };
+      const adds = [];
+      if (aiSuggest.title) adds.push(freshText({ content: aiSuggest.title, font: "fraunces", size: 40, pos: { x: 8, y: 50 } }));
+      if (aiSuggest.subtitle) adds.push(freshText({ content: aiSuggest.subtitle, font: "inter", size: 18, pos: { x: 8, y: 65 } }));
+      cur.texts = [...cur.texts, ...adds];
+      if (aiSuggest.cta) {
+        cur.cta = true;
+        cur.ctaText = aiSuggest.cta;
+      }
+      slides[active] = cur;
+      return { ...p, slides };
+    });
+    showToast("Ubačeno na platno");
+  }
+  async function doCaption() {
+    if (!project || !slide) return;
+    const d = await askAI("caption", {
+      idea: aiIdea || slide.texts.map((t) => t.content).join(", "),
+      format: FORMAT_META[project.format].short,
+      texts: slide.texts.map((t) => t.content),
+    });
+    if (d) setAiCaption(d);
+  }
+  async function doImprove() {
+    if (!selText || !project) return;
+    const d = await askAI("improve", { text: selText.content, tone: aiTone, format: FORMAT_META[project.format].short });
+    if (d?.content) {
+      patchText(selText.id, { content: d.content });
+      showToast("Tekst poboljšan");
+    }
+  }
+  async function doLayout() {
+    if (!project || !slide || slide.texts.length === 0) return;
+    const d = await askAI("layout", { texts: slide.texts.map((t) => t.content), format: FORMAT_META[project.format].short });
+    if (d?.layout && Array.isArray(d.layout)) {
+      setProject((p) => {
+        if (!p) return p;
+        const slides = p.slides.slice();
+        const cur = { ...slides[active] };
+        cur.texts = cur.texts.map((t, i) => {
+          const l = d.layout[i];
+          if (!l) return t;
+          return {
+            ...t,
+            pos: { x: Math.max(2, Math.min(90, l.x ?? t.pos.x)), y: Math.max(2, Math.min(92, l.y ?? t.pos.y)) },
+            size: l.size ?? t.size,
+            align: l.align ?? t.align,
+          };
+        });
+        slides[active] = cur;
+        return { ...p, slides };
+      });
+      showToast("Raspoređeno");
+    }
+  }
 
   const filtered = filter === "all" ? projects : projects.filter((p) => p.format === filter);
   const textAnimStyle = (delay: number): React.CSSProperties =>
@@ -518,6 +622,16 @@ export default function Studio() {
                   <button className={`fmt-chip${previewing ? " on" : ""}`} onClick={playPreview} title="Pregledaj animaciju">
                     <I.Play style={{ width: 13, height: 13 }} /> Pregled
                   </button>
+                  <button
+                    className="fmt-chip fmt-chip-ai"
+                    onClick={() => {
+                      setPropTab("ai");
+                      if (window.innerWidth <= 760) setSheet("props");
+                    }}
+                    title="AI pomoć"
+                  >
+                    <I.Sparkle style={{ width: 13, height: 13 }} /> AI pomoć
+                  </button>
                 </div>
 
                 <div className="canvas-wrap">
@@ -708,6 +822,9 @@ export default function Studio() {
                   </button>
                   <button className={propTab === "layer" ? "on" : ""} onClick={() => setPropTab("layer")}>
                     <I.Layers /> Sloj
+                  </button>
+                  <button className={`ai-tab${propTab === "ai" ? " on" : ""}`} onClick={() => setPropTab("ai")}>
+                    <I.Sparkle /> AI
                   </button>
                 </div>
                 <div className="panel-scroll">
@@ -972,6 +1089,123 @@ export default function Studio() {
                             <i />
                           </button>
                         </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* ---- AI ---- */}
+                  {propTab === "ai" && (
+                    <>
+                      <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 14, lineHeight: 1.5 }}>
+                        Opiši ideju objave pa neka AI predloži tekst, caption i raspored.
+                      </p>
+                      <div className="field">
+                        <label>Ideja / tema</label>
+                        <textarea
+                          className="txt-in"
+                          rows={3}
+                          placeholder="npr. vikend popust 20% na sitne kolače za slavu"
+                          value={aiIdea}
+                          onChange={(e) => setAiIdea(e.target.value)}
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button className="btn btn-primary" style={{ flex: 1 }} disabled={!!aiBusy} onClick={doSuggest}>
+                          <I.Sparkle /> {aiBusy === "suggest" ? "Radim…" : "Predloži tekst"}
+                        </button>
+                        <button className="btn btn-ghost" style={{ flex: 1 }} disabled={!!aiBusy} onClick={doCaption}>
+                          {aiBusy === "caption" ? "Radim…" : "Caption + #"}
+                        </button>
+                      </div>
+
+                      {aiMsg && (
+                        <p className="hint" style={{ marginTop: 14 }}>
+                          <I.Info /> {aiMsg}
+                        </p>
+                      )}
+
+                      {aiSuggest && (
+                        <div className="ai-card">
+                          <div className="ai-card-h">Predlog teksta</div>
+                          {aiSuggest.title && (
+                            <p>
+                              <b>Naslov:</b> {aiSuggest.title}
+                            </p>
+                          )}
+                          {aiSuggest.subtitle && (
+                            <p>
+                              <b>Podnaslov:</b> {aiSuggest.subtitle}
+                            </p>
+                          )}
+                          {aiSuggest.cta && (
+                            <p>
+                              <b>CTA:</b> {aiSuggest.cta}
+                            </p>
+                          )}
+                          <button className="btn btn-gold" style={{ width: "100%", marginTop: 10 }} onClick={insertSuggested}>
+                            <I.Plus /> Ubaci na platno
+                          </button>
+                        </div>
+                      )}
+
+                      {aiCaption && (
+                        <div className="ai-card">
+                          <div className="ai-card-h">Caption</div>
+                          <p style={{ whiteSpace: "pre-wrap" }}>{aiCaption.caption}</p>
+                          {!!aiCaption.hashtags?.length && (
+                            <p style={{ color: "var(--plum-300)", marginTop: 6 }}>{aiCaption.hashtags.join(" ")}</p>
+                          )}
+                          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                            <button className="chip" onClick={() => copyText(aiCaption.caption || "")}>
+                              <I.Copy style={{ width: 12, height: 12, marginRight: 5 }} /> Kopiraj caption
+                            </button>
+                            {!!aiCaption.hashtags?.length && (
+                              <button className="chip" onClick={() => copyText((aiCaption.hashtags || []).join(" "))}>
+                                <I.Copy style={{ width: 12, height: 12, marginRight: 5 }} /> Kopiraj #
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="divide" />
+                      <div className="field">
+                        <label>Poboljšaj izabrani tekst</label>
+                        {selText ? (
+                          <>
+                            <select
+                              className="mini-select"
+                              style={{ width: "100%", height: 42, marginBottom: 10 }}
+                              value={aiTone}
+                              onChange={(e) => setAiTone(e.target.value)}
+                            >
+                              <option>Toplo i primamljivo</option>
+                              <option>Kraće i udarno</option>
+                              <option>Duže i opisno</option>
+                              <option>Zvaničnije</option>
+                              <option>Zaigrano, sa emojijima</option>
+                              <option>Ispravi gramatiku</option>
+                            </select>
+                            <button className="btn btn-ghost" style={{ width: "100%" }} disabled={!!aiBusy} onClick={doImprove}>
+                              <I.Sparkle /> {aiBusy === "improve" ? "Radim…" : `Poboljšaj: „${selText.content.slice(0, 18)}…"`}
+                            </button>
+                          </>
+                        ) : (
+                          <p style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5 }}>
+                            Izaberi tekst (u tabu Tekst ili klikom na platnu) pa ga AI poboljšava.
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="divide" />
+                      <div className="field">
+                        <label>Raspored (AI)</label>
+                        <button className="btn btn-ghost" style={{ width: "100%" }} disabled={!!aiBusy || slide.texts.length === 0} onClick={doLayout}>
+                          <I.Sparkle /> {aiBusy === "layout" ? "Radim…" : "Rasporedi tekst po platnu"}
+                        </button>
+                        <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 8, lineHeight: 1.5 }}>
+                          AI namesti pozicije i veličine slojeva unutar bezbedne zone.
+                        </p>
                       </div>
                     </>
                   )}
