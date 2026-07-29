@@ -14,10 +14,12 @@ export function ExportStage({
   project,
   slide,
   width,
+  overlayOnly = false,
 }: {
   project: Project;
   slide: Slide;
   width: number;
+  overlayOnly?: boolean; // za video slajd: samo scrim+tekst+CTA na providnoj podlozi
 }) {
   const fmt = FORMAT_META[project.format];
   const height = Math.round(width * (fmt.h / fmt.w));
@@ -33,9 +35,10 @@ export function ExportStage({
         overflow: "hidden",
         position: "relative",
         flex: "none",
+        background: overlayOnly ? "transparent" : undefined,
       }}
     >
-      {url && (
+      {!overlayOnly && url && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           className="bg"

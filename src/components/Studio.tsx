@@ -26,11 +26,14 @@ import * as I from "./icons";
 import { ExportStage } from "./ExportStage";
 import {
   captureNodes,
-  zipImages,
+  zipMixed,
   downloadBlob,
   safeFileName,
-  exportReelsVideo,
+  exportReelsMontage,
+  exportVideoSlide,
   videoSupported,
+  isVideoUrl,
+  type ReelsSegment,
 } from "@/lib/exporter";
 
 const FMT_ICON: Record<Format, React.FC<React.SVGProps<SVGSVGElement>>> = {
@@ -105,7 +108,11 @@ export default function Studio() {
   const [novaTopic, setNovaTopic] = useState("Torta od malina, nova ove nedelje");
   const [novaCaps, setNovaCaps] = useState<{ kicker: string; text: string }[]>([]);
   const [novaCapIdx, setNovaCapIdx] = useState(0);
-  const [exportJob, setExportJob] = useState<null | { slides: Slide[]; project: Project; width: number }>(null);
+  const [exportJob, setExportJob] = useState<null | {
+    items: { slide: Slide; video: boolean }[];
+    project: Project;
+    width: number;
+  }>(null);
   const [exportUI, setExportUI] = useState<null | { pct: number; label: string; error?: boolean }>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
@@ -293,24 +300,33 @@ export default function Studio() {
     ).then(() => undefined);
   }
 
-  // ---- stvarni izvoz: PNG / ZIP / MP4 zavisno od formata ----
+  // ---- stvarni izvoz: svestan tipa medija po svakom slajdu ----
+  function slideHasOverlay(s: Slide): boolean {
+    return s.texts.length > 0 || s.cta || s.scrim > 0;
+  }
+
   async function runExport() {
     if (!project || exportUI) return;
     const proj = project;
-    const slides = proj.slides.filter((s) => s.mediaId);
-    if (slides.length === 0) {
-      showToast("Dodaj bar jednu sliku pre izvoza");
+    const fmt = FORMAT_META[proj.format];
+    // prepoznaj po svakom slajdu da li je slika ili video (po stvarnom fajlu)
+    const items = proj.slides
+      .filter((s) => s.mediaId)
+      .map((slide) => ({ slide, video: isVideoUrl(mediaUrl(slide.mediaId)) }));
+    if (items.length === 0) {
+      showToast("Dodaj bar jedan medij pre izvoza");
       return;
     }
+    const hasVideo = items.some((it) => it.video);
+    const isReels = proj.format === "reels";
 
     // izmeri trenutno platno da izvoz bude 1:1 sa onim što se vidi
     const rect = canvasRef.current?.getBoundingClientRect();
     const width = Math.round(rect?.width || 440);
-    const pixelRatio = FORMAT_META[proj.format].w / width; // ciljano ~1080px širine
-    const isReels = proj.format === "reels";
+    const pixelRatio = fmt.w / width; // ciljano ~1080px širine
 
-    setExportUI({ pct: 0, label: isReels ? "Spremam video…" : "Spremam slike…" });
-    setExportJob({ slides, project: proj, width });
+    setExportUI({ pct: 0, label: isReels || hasVideo ? "Spremam…" : "Spremam slike…" });
+    setExportJob({ items, project: proj, width });
 
     // sačekaj dva frejma da se off-screen render iscrta
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -332,43 +348,93 @@ export default function Studio() {
 
     const base = safeFileName(proj.name);
     try {
-      const blobs = await captureNodes(nodes, pixelRatio, (done, total) =>
-        setExportUI({
-          pct: Math.round((done / total) * (isReels ? 40 : 100)),
-          label: isReels ? `Spremam kadrove… ${done}/${total}` : `Spremam slike… ${done}/${total}`,
-        }),
+      // snimi sve čvorove: slika-slajd → gotov PNG; video-slajd → transparentni overlay
+      const capBlobs = await captureNodes(nodes, pixelRatio, (done, total) =>
+        setExportUI({ pct: Math.round((done / total) * (isReels || hasVideo ? 30 : 100)), label: `Spremam kadrove… ${done}/${total}` }),
       );
 
       if (isReels) {
-        let videoOk = false;
+        // montaža: slike stoje, video slajdovi se puštaju — jedan .mp4
+        let ok = false;
         if (videoSupported()) {
           try {
-            setExportUI({ pct: 45, label: "Snimam video…" });
-            const { blob, ext } = await exportReelsVideo(blobs, proj.transition, (p) =>
-              setExportUI({ pct: 45 + Math.round(p * 50), label: "Snimam video…" }),
+            setExportUI({ pct: 35, label: "Snimam video…" });
+            const segments: ReelsSegment[] = items.map((it, i) =>
+              it.video
+                ? {
+                    kind: "video",
+                    url: mediaUrl(it.slide.mediaId)!,
+                    imgBlob: slideHasOverlay(it.slide) ? capBlobs[i] : undefined,
+                    zoom: it.slide.zoom,
+                    focus: it.slide.focus,
+                  }
+                : { kind: "still", imgBlob: capBlobs[i] },
+            );
+            const { blob, ext } = await exportReelsMontage(segments, proj.transition, (p) =>
+              setExportUI({ pct: 35 + Math.round(p * 60), label: "Snimam video…" }),
             );
             downloadBlob(blob, `${base}.${ext}`);
-            setExportUI({ pct: 100, label: `Video spreman ✦ (.${ext})` });
-            videoOk = true;
+            setExportUI({ pct: 100, label: `Reels spreman ✦ (.${ext})` });
+            ok = true;
           } catch (e) {
-            console.warn("video export fallback", e);
+            console.warn("reels montage fallback", e);
           }
         }
-        if (!videoOk) {
-          // fallback: uvek isporuči nešto upotrebljivo — kadrove kao numerisan .zip
-          const zip = await zipImages(blobs, base);
+        if (!ok) {
+          const zip = await zipMixed(capBlobs.map((b, i) => ({ name: `${base}-${i + 1}.png`, blob: b })));
           downloadBlob(zip, `${base}-reels-kadrovi.zip`);
-          setExportUI({ pct: 100, label: "Video nije podržan — sačuvani su kadrovi (.zip)." });
+          setExportUI({ pct: 100, label: "Video nije podržan — sačuvani kadrovi (.zip)." });
         }
-      } else if (blobs.length === 1) {
-        downloadBlob(blobs[0], `${base}.png`);
-        setExportUI({ pct: 100, label: "Slika spremna ✦" });
       } else {
-        const zip = await zipImages(blobs, base);
-        downloadBlob(zip, `${base}.zip`);
-        setExportUI({ pct: 100, label: `${blobs.length} slika spremno ✦ (.zip)` });
+        // Objava / Story / Carousel — po slajdu: slika → PNG, video → MP4/WebM
+        const outputs: { name: string; blob: Blob }[] = [];
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          const nm = items.length === 1 ? base : `${base}-${i + 1}`;
+          if (!it.video) {
+            outputs.push({ name: `${nm}.png`, blob: capBlobs[i] });
+          } else {
+            setExportUI({ pct: 30 + Math.round((i / items.length) * 60), label: `Snimam video ${i + 1}/${items.length}…` });
+            try {
+              const { blob, ext } = await exportVideoSlide({
+                url: mediaUrl(it.slide.mediaId)!,
+                overlayBlob: slideHasOverlay(it.slide) ? capBlobs[i] : null,
+                hasOverlay: slideHasOverlay(it.slide),
+                W: fmt.w,
+                H: fmt.h,
+                zoom: it.slide.zoom,
+                focus: it.slide.focus,
+                onProgress: (p) =>
+                  setExportUI({ pct: 30 + Math.round(((i + p) / items.length) * 60), label: `Snimam video ${i + 1}/${items.length}…` }),
+              });
+              outputs.push({ name: `${nm}.${ext}`, blob });
+            } catch (e) {
+              console.warn("video slide fallback → original", e);
+              // fallback: prosledi originalni video fajl (bez uklopljenog teksta)
+              try {
+                const url = mediaUrl(it.slide.mediaId)!;
+                const r = await fetch(url, { mode: "cors" });
+                const blob = await r.blob();
+                const m = url.match(/\.(mp4|mov|webm|m4v)(\?|#|$)/i);
+                outputs.push({ name: `${nm}.${(m?.[1] || "mp4").toLowerCase()}`, blob });
+              } catch {
+                outputs.push({ name: `${nm}.png`, blob: capBlobs[i] });
+              }
+            }
+          }
+        }
+
+        if (outputs.length === 1) {
+          downloadBlob(outputs[0].blob, outputs[0].name);
+          setExportUI({ pct: 100, label: outputs[0].name.endsWith(".png") ? "Slika spremna ✦" : "Video spreman ✦" });
+        } else {
+          const zip = await zipMixed(outputs);
+          downloadBlob(zip, `${base}.zip`);
+          const nImg = outputs.filter((o) => o.name.endsWith(".png")).length;
+          const nVid = outputs.length - nImg;
+          setExportUI({ pct: 100, label: `${nImg} slika${nVid ? ` + ${nVid} video` : ""} u .zip ✦` });
+        }
       }
-      // tiho osveži nacrt (bez dodatnog toasta)
       persistProject({ ...proj, updatedAt: new Date().toISOString() }).catch(() => {});
     } catch (err) {
       console.error("export", err);
@@ -2145,8 +2211,14 @@ export default function Studio() {
             zIndex: -1,
           }}
         >
-          {exportJob.slides.map((s) => (
-            <ExportStage key={s.id} project={exportJob.project} slide={s} width={exportJob.width} />
+          {exportJob.items.map((it) => (
+            <ExportStage
+              key={it.slide.id}
+              project={exportJob.project}
+              slide={it.slide}
+              width={exportJob.width}
+              overlayOnly={it.video}
+            />
           ))}
         </div>
       )}
