@@ -127,16 +127,17 @@ export async function POST(req: Request) {
     const models = [GEMINI_MODEL, "gemini-2.0-flash", "gemini-flash-latest", "gemini-1.5-flash"].filter(
       (m, i, a) => a.indexOf(m) === i,
     );
-    let lastErr = "";
+    const tried: string[] = [];
     for (const m of models) {
       try {
-        return Response.json(await callGemini(geminiKey, m, BRAND, user));
+        const out = await callGemini(geminiKey, m, BRAND, user);
+        return Response.json({ ...(out as object), _via: m, _skipped: tried });
       } catch (e) {
-        lastErr = `[${m}] ${(e as Error).message || String(e)}`;
+        tried.push(`[${m}] ${(e as Error).message || String(e)}`);
       }
     }
-    console.error("Gemini error", lastErr);
-    return Response.json({ error: "ai_failed", detail: lastErr.slice(0, 300) }, { status: 502 });
+    console.error("Gemini error", tried.join(" | "));
+    return Response.json({ error: "ai_failed", detail: tried.join(" | ").slice(0, 400) }, { status: 502 });
   }
 
   try {

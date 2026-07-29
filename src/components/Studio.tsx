@@ -304,6 +304,9 @@ export default function Studio() {
         return null;
       }
       if (data?.demo) setAiMsg("Demo režim — dodaj GEMINI_API_KEY (besplatno) ili ANTHROPIC_API_KEY u Vercel za pravi AI.");
+      else if (data?._via && data._via !== "gemini-2.5-flash") {
+        setAiMsg(`Model: ${data._via}. gemini-2.5-flash preskočen → ${data._skipped?.[0] || "nedostupan"}`);
+      }
       return data;
     } catch {
       setAiMsg("Greška u komunikaciji sa AI-jem.");
