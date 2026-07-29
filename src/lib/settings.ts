@@ -100,6 +100,23 @@ export function applyBrandFonts(b: BrandProfile) {
   document.documentElement.style.setProperty("--font-body", fontCss(b.bodyFont));
 }
 
+// ---- stvarni dnevni brojač AI poziva (besplatni tier ~20/dan) ----
+export const AI_DAILY_LIMIT = 20;
+const CALLS_PREFIX = "ruzini_ai_calls_";
+function todayKey(): string {
+  return CALLS_PREFIX + new Date().toISOString().slice(0, 10);
+}
+export function getAiCallsToday(): number {
+  if (typeof window === "undefined") return 0;
+  return Number(localStorage.getItem(todayKey()) || 0);
+}
+export function bumpAiCalls(): number {
+  if (typeof window === "undefined") return 0;
+  const n = getAiCallsToday() + 1;
+  localStorage.setItem(todayKey(), String(n));
+  return n;
+}
+
 // fonts offered for headings vs body in Brend
 export const HEADING_FONTS = ["playfair", "cormorant", "lora", "fraunces", "ebgaramond", "dmserif", "marcellus"];
 export const BODY_FONTS = ["archivo", "karla", "inter", "worksans", "nunito", "lora"];

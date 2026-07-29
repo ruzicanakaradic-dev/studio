@@ -114,7 +114,12 @@ async function callGemini(key: string, model: string, sys: string, user: string)
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: sys }] },
       contents: [{ role: "user", parts: [{ text: user }] }],
-      generationConfig: { maxOutputTokens: 900, temperature: 0.8, responseMimeType: "application/json" },
+      generationConfig: {
+        maxOutputTokens: 2048,
+        temperature: 0.8,
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     }),
   });
   if (!res.ok) {
@@ -162,8 +167,8 @@ export async function POST(req: Request) {
   const sys = buildSystem(body.brand);
 
   if (geminiKey) {
-    // Jedan poziv po akciji da ne trošimo minutni limit (RPM). Jedna rezerva samo ako prvi 404-uje.
-    const models = [GEMINI_MODEL, "gemini-3-flash"].filter((m, i, a) => a.indexOf(m) === i);
+    // Jedan poziv po akciji da ne trošimo minutni limit (RPM). Rezerva je lite (non-thinking, pouzdan JSON).
+    const models = [GEMINI_MODEL, "gemini-flash-lite-latest"].filter((m, i, a) => a.indexOf(m) === i);
     const tried: string[] = [];
     for (const m of models) {
       try {

@@ -18,6 +18,9 @@ import {
   loadAi,
   saveAi,
   applyBrandFonts,
+  AI_DAILY_LIMIT,
+  getAiCallsToday,
+  bumpAiCalls,
 } from "@/lib/settings";
 import * as I from "./icons";
 
@@ -85,6 +88,8 @@ export default function Studio() {
   const [brand, setBrand] = useState<BrandProfile>(DEFAULT_BRAND);
   const [aiSet, setAiSet] = useState<AiSettings>(DEFAULT_AI);
   const [aiTest, setAiTest] = useState<string | null>(null);
+  const [aiCalls, setAiCalls] = useState(0);
+  const [aiLimited, setAiLimited] = useState(false);
   const [novaFmt, setNovaFmt] = useState<Format>("post");
   const [novaPhotos, setNovaPhotos] = useState<string[]>([]);
   const [novaTopic, setNovaTopic] = useState("Torta od malina, nova ove nedelje");
@@ -102,6 +107,7 @@ export default function Studio() {
     setBrand(b);
     applyBrandFonts(b);
     setAiSet(loadAi());
+    setAiCalls(getAiCallsToday());
   }, []);
 
   // persist + apply brand fonts live
@@ -402,6 +408,7 @@ export default function Studio() {
       });
       const data = await res.json();
       if (data?.error) {
+        if (data?.quota) setAiLimited(true);
         setAiMsg(
           data?.detail
             ? `AI greška: ${data.detail}`
@@ -410,6 +417,10 @@ export default function Studio() {
         return null;
       }
       if (data?.demo) setAiMsg("Demo režim — dodaj GEMINI_API_KEY (besplatno) ili ANTHROPIC_API_KEY u Vercel za pravi AI.");
+      else {
+        setAiLimited(false);
+        setAiCalls(bumpAiCalls());
+      }
       return data;
     } catch {
       setAiMsg("Greška u komunikaciji sa AI-jem.");
@@ -839,13 +850,23 @@ export default function Studio() {
 
                 <div className="quota-card">
                   <div className="quota-top">
-                    <b>POVEZANO · BESPLATAN NIVO</b>
-                    <span>{aiSet.quotaUsed} / {aiSet.quotaLimit} DNEVNO</span>
+                    <b>{aiLimited ? "LIMIT DOSTIGNUT · SAČEKAJ" : "POVEZANO · BESPLATAN NIVO"}</b>
+                    <span>
+                      {aiCalls} / {AI_DAILY_LIMIT} DANAS
+                    </span>
                   </div>
                   <div className="quota-bar">
-                    <span style={{ width: `${(aiSet.quotaUsed / aiSet.quotaLimit) * 100}%` }} />
+                    <span
+                      style={{
+                        width: `${Math.min(100, (aiCalls / AI_DAILY_LIMIT) * 100)}%`,
+                        background: aiLimited ? "#B4453E" : undefined,
+                      }}
+                    />
                   </div>
-                  <p>Bez pretplate i bez kartice. Ako pređeš kvotu, Studio pita pre nego što nastavi.</p>
+                  <p>
+                    Besplatni nivo: ~{AI_DAILY_LIMIT} poziva dnevno i 5 u minuti. Broji pozive koje si napravila u ovom
+                    pregledaču danas. Za više — „Set up billing" u Google AI Studiju (i dalje ~besplatno na ovom obimu).
+                  </p>
                 </div>
 
                 <div className="ai-cols">
