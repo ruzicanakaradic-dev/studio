@@ -610,6 +610,11 @@ textarea.txt-in{min-height:64px;line-height:1.4}
 .log-when{display:block;margin-top:6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
   color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 
+/* Safe zone — lista prekršaja */
+.safe-viol{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--cream-2);border:1px solid var(--line);border-radius:12px;padding:9px 10px 9px 13px}
+.safe-viol-name{font-size:13px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
 /* ═══════════ MOBILNI EDITOR — vertikalni raspored (mora biti na kraju fajla
    da nadjača bazne .tool-rail/.panel-r definicije; media query ne diže specifičnost) ═══════════ */
 @media(max-width:760px){

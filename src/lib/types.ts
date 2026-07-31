@@ -79,6 +79,7 @@ export interface Project {
   transition: Transition; // prelaz između slajdova (u pregledu)
   textAnim: TextAnim; // animacija teksta (u pregledu)
   caption?: string; // opis objave (Instagram/TikTok) — čuva se uz nacrt
+  safe?: SafeInset; // ručno podešene margine bezbedne zone (ako nema — koristi se podrazumevano po formatu)
   updatedAt: string; // ISO
 }
 

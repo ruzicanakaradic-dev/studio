@@ -88,7 +88,7 @@ export default function Studio() {
   const [newOpen, setNewOpen] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [active, setActive] = useState(0);
-  const [propTab, setPropTab] = useState<"foto" | "text" | "cta" | "layer" | "brend" | "red" | "ai">("text");
+  const [propTab, setPropTab] = useState<"foto" | "text" | "cta" | "layer" | "brend" | "red" | "ai" | "safe">("text");
   const [sheet, setSheet] = useState<null | "media" | "props">(null);
   const [selId, setSelId] = useState<string | null>(null); // text layer id, "cta", or null
   const [toast, setToast] = useState<string | null>(null);
@@ -162,6 +162,24 @@ export default function Studio() {
   const slide = project?.slides[active] ?? null;
   const fmt = project ? FORMAT_META[project.format] : null;
   const selText = slide?.texts.find((t) => t.id === selId) ?? null;
+
+  // bezbedna zona (margine) — ručno podešene ili podrazumevane po formatu
+  const curSafe = project?.safe ?? fmt?.safe ?? { top: 0.05, bottom: 0.08, left: 0.05, right: 0.05 };
+  function setSafeInset(edge: "top" | "bottom" | "left" | "right", val: number) {
+    setProject((p) => (p ? { ...p, safe: { ...(p.safe ?? FORMAT_META[p.format].safe), [edge]: val } } : p));
+  }
+  function resetSafe() {
+    setProject((p) => (p ? { ...p, safe: undefined } : p));
+  }
+  function outsideSafe(x: number, y: number): boolean {
+    return x < curSafe.left * 100 || x > (1 - curSafe.right) * 100 || y < curSafe.top * 100 || y > (1 - curSafe.bottom) * 100;
+  }
+  function clampSafe(pos: { x: number; y: number }): { x: number; y: number } {
+    return {
+      x: Math.min(Math.max(pos.x, curSafe.left * 100), (1 - curSafe.right) * 100),
+      y: Math.min(Math.max(pos.y, curSafe.top * 100), (1 - curSafe.bottom) * 100),
+    };
+  }
 
   // pri promeni slajda/medija zaustavi video pregled
   useEffect(() => {
@@ -1550,9 +1568,14 @@ export default function Studio() {
                     <I.Play style={{ width: 13, height: 13 }} /> Pregled
                   </button>
                   <button
-                    className={`fmt-chip${safeZone ? " on" : ""}`}
-                    onClick={() => setSafeZone((v) => !v)}
-                    title="Bezbedna zona — drži tekst/CTA unutar okvira"
+                    className={`fmt-chip${propTab === "safe" ? " on" : ""}`}
+                    onClick={() => {
+                      setSelId(null);
+                      setSafeZone(true);
+                      setPropTab("safe");
+                      if (window.innerWidth <= 760) document.querySelector(".panel-r")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                    title="Bezbedna zona — margine i šta upada u zonu"
                   >
                     <I.Frame style={{ width: 13, height: 13 }} /> Safe zone
                   </button>
@@ -1699,10 +1722,10 @@ export default function Studio() {
                           <div
                             className="safezone"
                             style={{
-                              left: `${fmt.safe.left * 100}%`,
-                              top: `${fmt.safe.top * 100}%`,
-                              right: `${fmt.safe.right * 100}%`,
-                              bottom: `${fmt.safe.bottom * 100}%`,
+                              left: `${curSafe.left * 100}%`,
+                              top: `${curSafe.top * 100}%`,
+                              right: `${curSafe.right * 100}%`,
+                              bottom: `${curSafe.bottom * 100}%`,
                             }}
                           >
                             <span className="safezone-tag">Safe zone</span>
@@ -1786,6 +1809,104 @@ export default function Studio() {
                   </button>
                 </div>
                 <div className="panel-scroll">
+                  {/* ---- SAFE ZONE (margine) ---- */}
+                  {propTab === "safe" && (
+                    <>
+                      <div className="field">
+                        <label>Bezbedna zona</label>
+                        <p style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5, marginTop: 4 }}>
+                          Instagram i TikTok preko ivica objave prikazuju svoj interfejs (nalog, opis, dugmad). Drži važan
+                          tekst i CTA unutar isprekidane linije da ih ništa ne prekrije.
+                        </p>
+                      </div>
+                      <div className="toggle-row" style={{ marginTop: 4 }}>
+                        <b style={{ fontWeight: 500, fontSize: 13.5 }}>Prikaži vodič na platnu</b>
+                        <button className={`switch${safeZone ? " on" : ""}`} onClick={() => setSafeZone((v) => !v)}>
+                          <i />
+                        </button>
+                      </div>
+                      <div className="divide" />
+                      <div className="field">
+                        <label>Margine — koliko čuvamo od ivice</label>
+                        {(
+                          [
+                            ["top", "Gore"],
+                            ["bottom", "Dole"],
+                            ["left", "Levo"],
+                            ["right", "Desno"],
+                          ] as ["top" | "bottom" | "left" | "right", string][]
+                        ).map(([edge, lbl]) => (
+                          <div className="range-row" key={edge} style={{ marginTop: 8 }}>
+                            <span style={{ width: 46, fontSize: 12.5, color: "var(--muted)", flex: "0 0 46px" }}>{lbl}</span>
+                            <input
+                              type="range"
+                              className="range"
+                              min={0}
+                              max={30}
+                              value={Math.round(curSafe[edge] * 100)}
+                              onChange={(e) => setSafeInset(edge, +e.target.value / 100)}
+                            />
+                            <span className="range-val">{Math.round(curSafe[edge] * 100)}%</span>
+                          </div>
+                        ))}
+                        <button className="btn btn-text" style={{ marginTop: 10, padding: 0 }} onClick={resetSafe}>
+                          Vrati podrazumevane margine
+                        </button>
+                      </div>
+                      <div className="divide" />
+                      <div className="field">
+                        <label>Šta upada u zonu</label>
+                        {(() => {
+                          const viols: { key: string; label: string; fix: () => void }[] = [];
+                          slide.texts.forEach((t, i) => {
+                            if (outsideSafe(t.pos.x, t.pos.y))
+                              viols.push({
+                                key: t.id,
+                                label: `Tekst ${i + 1}${t.content ? ` · „${t.content.slice(0, 18)}${t.content.length > 18 ? "…" : ""}"` : ""}`,
+                                fix: () => patchText(t.id, { pos: clampSafe(t.pos) }),
+                              });
+                          });
+                          if (slide.cta && outsideSafe(slide.ctaPos.x, slide.ctaPos.y))
+                            viols.push({
+                              key: "cta",
+                              label: `Dugme · „${slide.ctaText}"`,
+                              fix: () => patchSlide({ ctaPos: clampSafe(slide.ctaPos) }),
+                            });
+                          if (viols.length === 0)
+                            return (
+                              <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 8, lineHeight: 1.5 }}>
+                                Sve je unutar bezbedne zone. 👍
+                              </p>
+                            );
+                          return (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+                              {viols.map((v) => (
+                                <div key={v.key} className="safe-viol">
+                                  <span className="safe-viol-name">{v.label}</span>
+                                  <button className="btn btn-outline" style={{ height: 32, padding: "0 12px", fontSize: 11.5 }} onClick={v.fix}>
+                                    Uvuci unutra
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                className="btn btn-text"
+                                style={{ padding: 0, alignSelf: "flex-start" }}
+                                onClick={() => {
+                                  slide.texts.forEach((t) => {
+                                    if (outsideSafe(t.pos.x, t.pos.y)) patchText(t.id, { pos: clampSafe(t.pos) });
+                                  });
+                                  if (slide.cta && outsideSafe(slide.ctaPos.x, slide.ctaPos.y)) patchSlide({ ctaPos: clampSafe(slide.ctaPos) });
+                                }}
+                              >
+                                Uvuci sve unutra
+                              </button>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </>
+                  )}
+
                   {/* ---- FOTO (media + slika) ---- */}
                   {propTab === "foto" && (
                     <>
@@ -2127,17 +2248,10 @@ export default function Studio() {
                       </div>
                       <div className="divide" />
                       <div className="field">
-                        <label>Safe zone (bezbedna zona)</label>
-                        <div className="toggle-row">
-                          <b style={{ fontWeight: 500, fontSize: 13.5 }}>Prikaži bezbednu zonu</b>
-                          <button className={`switch${safeZone ? " on" : ""}`} onClick={() => setSafeZone((v) => !v)}>
-                            <i />
-                          </button>
-                        </div>
-                        <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.5 }}>
-                          Drži tekst i CTA unutar isprekidane linije — van nje interfejs Instagrama / TikToka
-                          (nalog, opis, dugmad) prekriva sadržaj.
-                        </p>
+                        <label>Bezbedna zona</label>
+                        <button className="btn btn-outline" style={{ width: "100%", marginTop: 6 }} onClick={() => { setSelId(null); setSafeZone(true); setPropTab("safe"); }}>
+                          <I.Frame style={{ width: 15, height: 15 }} /> Otvori margine (Safe zone)
+                        </button>
                       </div>
                       <div className="divide" />
                       <div className="field">
