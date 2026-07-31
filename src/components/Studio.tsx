@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Align, CtaStyle, Format, MediaItem, Project, Slide } from "@/lib/types";
 import { FORMAT_META, TEXT_COLORS, FONTS, fontCss } from "@/lib/types";
 import { newProject, freshSlide, freshEmptySlide, freshText, mediaUrl } from "@/lib/samples";
-import { fetchProjects, fetchMedia, persistProject, uploadMedia, deleteProject } from "@/lib/store";
+import { fetchProjects, fetchMedia, persistProject, uploadMedia, deleteProject, deleteMedia } from "@/lib/store";
 import {
   type BrandProfile,
   type AiSettings,
@@ -86,7 +86,6 @@ export default function Studio() {
   const [filter, setFilter] = useState<"all" | Format>("all");
   const [timeFilter, setTimeFilter] = useState<"all" | "24h" | "7d" | "30d">("all");
   const [newOpen, setNewOpen] = useState(false);
-  const [newFmt, setNewFmt] = useState<Format | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [active, setActive] = useState(0);
   const [propTab, setPropTab] = useState<"foto" | "text" | "cta" | "layer" | "brend" | "red" | "ai" | "safe">("text");
@@ -297,9 +296,8 @@ export default function Studio() {
     setView("editor");
     setSheet(null);
   }
-  // otvori izbor tipa objave (bez ikakvog AI-a) — nastavak vodi na prazan canvas
+  // otvori izbor tipa objave (bez ikakvog AI-a) — klik na tip vodi na prazan canvas
   function openNew() {
-    setNewFmt(null);
     setNewOpen(true);
   }
   function createProject(format: Format) {
@@ -727,6 +725,20 @@ export default function Studio() {
   function slideIndexForMedia(id: string): number {
     return project ? project.slides.findIndex((s) => s.mediaId === id) : -1;
   }
+  // video thumbnail: #t=0.1 tera browser da prikaže prvi kadar kao poster
+  function vposter(url: string): string {
+    return url.includes("#") ? url : `${url}#t=0.1`;
+  }
+  // obriši medij iz biblioteke „Ranije korišćeno"
+  async function removeMedia(e: React.MouseEvent, item: MediaItem) {
+    e.stopPropagation();
+    if (!window.confirm(`Obrisati „${item.name}"? Ukloniće se iz biblioteke.`)) return;
+    setMedia((m) => m.filter((x) => x.id !== item.id));
+    setProject((p) => (p ? { ...p, slides: p.slides.map((s) => (s.mediaId === item.id ? { ...s, mediaId: null } : s)) } : p));
+    await deleteMedia(item.url);
+    showToast("Obrisano");
+    logEvent("info", `Obrisan medij — ${item.name}`, "Uklonjen iz biblioteke.");
+  }
   // vođeni tok: upload iz Photos galerije / kamere — svaka datoteka postaje strana
   async function onWizUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
@@ -1100,7 +1112,7 @@ export default function Studio() {
                     const Ico = FMT_ICON[p.format];
                     return (
                       <div key={p.id} className="post-tile" role="button" tabIndex={0} onClick={() => openEditor(p)}>
-                        {url && (isVideoUrl(url) ? <video src={url} muted playsInline preload="metadata" /> : <img src={url} alt="" />)}
+                        {url && (isVideoUrl(url) ? <video src={vposter(url)} muted playsInline preload="metadata" /> : <img src={url} alt="" />)}
                         <span className="post-badge">
                           <Ico /> {FORMAT_META[p.format].short}
                         </span>
@@ -1161,7 +1173,7 @@ export default function Studio() {
                     const Ico = FMT_ICON[p.format];
                     return (
                       <div key={p.id} className="post-tile" role="button" tabIndex={0} onClick={() => openEditor(p)}>
-                        {url && (isVideoUrl(url) ? <video src={url} muted playsInline preload="metadata" /> : <img src={url} alt="" />)}
+                        {url && (isVideoUrl(url) ? <video src={vposter(url)} muted playsInline preload="metadata" /> : <img src={url} alt="" />)}
                         <span className="post-badge">
                           <Ico /> {FORMAT_META[p.format].short}
                         </span>
@@ -1908,7 +1920,7 @@ export default function Studio() {
                             }}
                           >
                             <span className="n">{i + 1}</span>
-                            {u && (isVideoUrl(u) ? <video src={u} muted playsInline preload="metadata" /> : <img src={u} alt="" />)}
+                            {u && (isVideoUrl(u) ? <video src={vposter(u)} muted playsInline preload="metadata" /> : <img src={u} alt="" />)}
                           </button>
                         );
                       })}
@@ -2006,7 +2018,7 @@ export default function Studio() {
                       {slide.mediaId && (
                         <>
                           <div className="field">
-                            <label>Zum slike</label>
+                            <label>Zoom</label>
                             <div className="range-row">
                               <input
                                 type="range"
@@ -2047,7 +2059,7 @@ export default function Studio() {
                         </p>
                       </div>
 
-                      {/* ranije otpremljeno (bez uzoraka) — za ponovno korišćenje */}
+                      {/* ranije korišćeno (bez uzoraka) — za ponovno korišćenje + brisanje */}
                       {(() => {
                         const mine = media.filter((m) => !m.url.startsWith("/samples"));
                         if (mine.length === 0) return null;
@@ -2055,21 +2067,24 @@ export default function Studio() {
                           <>
                             <div className="divide" />
                             <div className="mono-label" style={{ marginBottom: 8 }}>
-                              Ranije otpremljeno
+                              Ranije korišćeno
                             </div>
-                            <div className="media-grid">
+                            <div className="media-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
                               {mine.map((m) => {
                                 const idx = slideIndexForMedia(m.id);
                                 return (
-                                  <button key={m.id} className={`media-tile${idx >= 0 ? " sel" : ""}`} onClick={() => wizToggleMedia(m.id)}>
-                                    {isVideoUrl(m.url) ? <video src={m.url} muted playsInline preload="metadata" /> : <img src={m.url} alt={m.name} />}
+                                  <div key={m.id} className={`media-tile${idx >= 0 ? " sel" : ""}`} role="button" tabIndex={0} onClick={() => wizToggleMedia(m.id)}>
+                                    {isVideoUrl(m.url) ? <video src={vposter(m.url)} muted playsInline preload="metadata" /> : <img src={m.url} alt={m.name} />}
                                     {m.kind === "video" && (
                                       <span className="vtag">
                                         <I.Play />
                                       </span>
                                     )}
                                     {idx >= 0 && <span className="np-badge">{idx + 1}</span>}
-                                  </button>
+                                    <button className="card-del" title="Obriši medij" onClick={(e) => removeMedia(e, m)}>
+                                      <I.Trash />
+                                    </button>
+                                  </div>
                                 );
                               })}
                             </div>
@@ -2333,7 +2348,7 @@ export default function Studio() {
                           .map((m) => (
                             <button key={m.id} className={`media-tile${slide.mediaId === m.id ? " sel" : ""}`} onClick={() => pickMedia(m.id)}>
                               {isVideoUrl(m.url) ? (
-                                <video src={m.url} muted playsInline preload="metadata" />
+                                <video src={vposter(m.url)} muted playsInline preload="metadata" />
                               ) : (
                                 <img src={m.url} alt={m.name} />
                               )}
@@ -2382,7 +2397,7 @@ export default function Studio() {
                               const u = mediaUrl(sl.mediaId);
                               return (
                                 <div key={sl.id} className={`layer-item${i === active ? " on" : ""}`} onClick={() => { setActive(i); setSelId(null); }}>
-                                  <span className="red-thumb">{u ? (isVideoUrl(u) ? <video src={u} muted playsInline preload="metadata" /> : <img src={u} alt="" />) : null}</span>
+                                  <span className="red-thumb">{u ? (isVideoUrl(u) ? <video src={vposter(u)} muted playsInline preload="metadata" /> : <img src={u} alt="" />) : null}</span>
                                   <span className="layer-name">
                                     {fmt.slideLabel} {i + 1}
                                   </span>
@@ -2892,7 +2907,7 @@ export default function Studio() {
             ).map(([f, title, desc]) => {
               const Ico = FMT_ICON[f];
               return (
-                <button key={f} className={`fmt-opt${newFmt === f ? " on" : ""}`} onClick={() => setNewFmt(f)}>
+                <button key={f} className="fmt-opt" onClick={() => createProject(f)}>
                   <span className="fmt-ico">
                     <Ico />
                   </span>
@@ -2900,21 +2915,16 @@ export default function Studio() {
                     <b>{title}</b>
                     <span>{desc}</span>
                   </span>
-                  {newFmt === f && (
-                    <span className="fmt-check" aria-hidden>
-                      <I.Check />
-                    </span>
-                  )}
+                  <span className="fmt-go" aria-hidden>
+                    <I.Arrow />
+                  </span>
                 </button>
               );
             })}
           </div>
-          <div className="modal-foot" style={{ gap: 10 }}>
+          <div className="modal-foot">
             <button className="btn btn-ghost" onClick={() => setNewOpen(false)}>
               Otkaži
-            </button>
-            <button className="btn btn-primary" disabled={!newFmt} onClick={() => newFmt && createProject(newFmt)}>
-              Nastavi <I.Arrow />
             </button>
           </div>
         </div>

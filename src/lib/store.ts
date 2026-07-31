@@ -189,6 +189,18 @@ export async function deleteProject(id: string): Promise<boolean> {
   return !error;
 }
 
+export async function deleteMedia(url: string): Promise<boolean> {
+  const supabase = createClient();
+  if (!supabase) return true; // demo režim — samo ukloni iz liste
+  await ensureSession(supabase);
+  const marker = `/${MEDIA_BUCKET}/`;
+  const i = url.indexOf(marker);
+  if (i < 0) return false;
+  const path = decodeURIComponent(url.slice(i + marker.length).split(/[?#]/)[0]);
+  const { error } = await supabase.storage.from(MEDIA_BUCKET).remove([path]);
+  return !error;
+}
+
 export async function fetchMedia(): Promise<MediaItem[]> {
   const supabase = createClient();
   if (!supabase) return SAMPLE_MEDIA;
