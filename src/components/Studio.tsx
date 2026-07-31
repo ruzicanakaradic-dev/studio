@@ -1039,7 +1039,7 @@ export default function Studio() {
               <div className="home-head">
                 <div>
                   <h1 className="page-title">
-                    Zdravo, Ružica <span style={{ fontFamily: "var(--font-body)" }}>👋</span>
+                    Zdravo, Ružice <span style={{ fontFamily: "var(--font-body)" }}>👋</span>
                   </h1>
                   <p className="page-sub">Petak je — vikend traži kolače.</p>
                 </div>
