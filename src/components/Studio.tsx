@@ -2105,34 +2105,62 @@ export default function Studio() {
                   )}
 
                   {/* ===== VOĐENI TOK — koraci Izgled / Animacija / Sačuvaj ===== */}
-                  {wizard && stepKey === "look" && (
-                    <>
-                      <div className="mono-label" style={{ marginBottom: 4 }}>
-                        Font naslova
-                      </div>
-                      <div className="font-grid">
-                        {HEADING_FONTS.map((f) => (
-                          <button key={f} className={`font-card${brand.headingFont === f ? " on" : ""}`} onClick={() => updateBrand({ headingFont: f })}>
-                            <b style={{ fontFamily: fontCss(f) }}>Ružini kolači</b>
-                            <i>{FONTS.find((x) => x.key === f)?.label}</i>
-                          </button>
-                        ))}
-                      </div>
-                      <div className="mono-label sect" style={{ margin: "16px 0 6px" }}>
-                        Font teksta
-                      </div>
-                      <div className="body-seg">
-                        {BODY_FONTS.map((f) => (
-                          <button key={f} className={brand.bodyFont === f ? "on" : ""} style={{ fontFamily: fontCss(f) }} onClick={() => updateBrand({ bodyFont: f })}>
-                            {FONTS.find((x) => x.key === f)?.label}
-                          </button>
-                        ))}
-                      </div>
-                      <p className="hint" style={{ marginTop: 14 }}>
-                        <I.Info /> Boje i ton se podešavaju u Brendu — važe za sve objave.
-                      </p>
-                    </>
-                  )}
+                  {wizard && stepKey === "look" && (() => {
+                    // Font se primenjuje na TEKST OVE objave (slojeve), ne na aplikaciju.
+                    const sorted = [...slide.texts].sort((a, b) => b.size - a.size);
+                    const titleText = sorted[0] ?? null; // najveći sloj = naslov
+                    const bodyTexts = sorted.slice(1); // ostali slojevi = tekst
+                    const bodyFontNow =
+                      bodyTexts.length && bodyTexts.every((t) => t.font === bodyTexts[0].font)
+                        ? bodyTexts[0].font
+                        : null;
+                    const setTitleFont = (f: string) => {
+                      if (titleText) patchText(titleText.id, { font: f });
+                    };
+                    const setBodyFont = (f: string) => {
+                      const targets = bodyTexts.length ? bodyTexts : titleText ? [titleText] : [];
+                      targets.forEach((t) => patchText(t.id, { font: f }));
+                    };
+                    if (!slide.texts.length) {
+                      return (
+                        <p className="hint" style={{ marginTop: 4 }}>
+                          <I.Info /> Prvo dodaj tekst u koraku „Tekst", pa ovde biraš font za njega.
+                        </p>
+                      );
+                    }
+                    return (
+                      <>
+                        <div className="mono-label" style={{ marginBottom: 4 }}>
+                          Font naslova
+                        </div>
+                        <div className="font-grid">
+                          {HEADING_FONTS.map((f) => (
+                            <button key={f} className={`font-card${titleText?.font === f ? " on" : ""}`} onClick={() => setTitleFont(f)}>
+                              <b style={{ fontFamily: fontCss(f) }}>{titleText?.content || "Ružini kolači"}</b>
+                              <i>{FONTS.find((x) => x.key === f)?.label}</i>
+                            </button>
+                          ))}
+                        </div>
+                        {bodyTexts.length ? (
+                          <>
+                            <div className="mono-label sect" style={{ margin: "16px 0 6px" }}>
+                              Font teksta
+                            </div>
+                            <div className="body-seg">
+                              {BODY_FONTS.map((f) => (
+                                <button key={f} className={bodyFontNow === f ? "on" : ""} style={{ fontFamily: fontCss(f) }} onClick={() => setBodyFont(f)}>
+                                  {FONTS.find((x) => x.key === f)?.label}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        ) : null}
+                        <p className="hint" style={{ marginTop: 14 }}>
+                          <I.Info /> Font menja izgled teksta na ovoj objavi. Boje i ton se podešavaju u Brendu.
+                        </p>
+                      </>
+                    );
+                  })()}
 
                   {wizard && stepKey === "anim" && (
                     <>
