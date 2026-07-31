@@ -86,6 +86,7 @@ export default function Studio() {
   const [filter, setFilter] = useState<"all" | Format>("all");
   const [timeFilter, setTimeFilter] = useState<"all" | "24h" | "7d" | "30d">("all");
   const [newOpen, setNewOpen] = useState(false);
+  const [newFmt, setNewFmt] = useState<Format | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [active, setActive] = useState(0);
   const [propTab, setPropTab] = useState<"foto" | "text" | "cta" | "layer" | "brend" | "red" | "ai" | "safe">("text");
@@ -294,6 +295,11 @@ export default function Studio() {
     setView("editor");
     setSheet(null);
   }
+  // otvori izbor tipa objave (bez ikakvog AI-a) — nastavak vodi na prazan canvas
+  function openNew() {
+    setNewFmt(null);
+    setNewOpen(true);
+  }
   function createProject(format: Format) {
     setNewOpen(false);
     // prazan canvas — bez teksta i CTA
@@ -304,14 +310,12 @@ export default function Studio() {
   }
   function onNav(k: string) {
     if (k === "nova") {
-      // na telefonu: prvo izbor tipa objave → prazan canvas (vođeni tok)
-      if (isMobile) setNewOpen(true);
-      else setView("nova");
+      openNew();
       return;
     }
     if (k === "platno") {
       if (project) setView("editor");
-      else setView("nova");
+      else openNew();
       return;
     }
     setView(k as "studio" | "objave" | "brend" | "ai" | "nova" | "log");
@@ -984,7 +988,7 @@ export default function Studio() {
                   </h1>
                   <p className="page-sub">Petak je — vikend traži kolače.</p>
                 </div>
-                <button className="btn btn-primary btn-cta" onClick={() => setView("nova")}>
+                <button className="btn btn-primary btn-cta" onClick={openNew}>
                   Nova objava <I.Arrow />
                 </button>
               </div>
@@ -1002,7 +1006,7 @@ export default function Studio() {
                         već predloženi — treba ti 30 sekundi snimka.
                       </p>
                       <div className="ai-band-actions">
-                        <button className="btn btn-outline" onClick={() => setView("nova")}>
+                        <button className="btn btn-outline" onClick={openNew}>
                           Otvori predlog
                         </button>
                         <button className="btn btn-text" onClick={() => setAiBandOff(true)}>
@@ -1085,7 +1089,7 @@ export default function Studio() {
                   <h1 className="page-title">Objave</h1>
                   <p className="page-sub">Sve tvoje objave na jednom mestu.</p>
                 </div>
-                <button className="btn btn-primary btn-cta" onClick={() => setView("nova")}>
+                <button className="btn btn-primary btn-cta" onClick={openNew}>
                   Nova objava <I.Arrow />
                 </button>
               </div>
@@ -2825,20 +2829,20 @@ export default function Studio() {
       {/* ===== NEW PROJECT MODAL ===== */}
       <div className={`overlay${newOpen ? " on" : ""}`}>
         <div className="modal">
-          <h2 className="serif">Novi projekat</h2>
-          <p className="m-sub">Izaberi format za Instagram objavu.</p>
+          <h2 className="serif">Nova objava</h2>
+          <p className="m-sub">Izaberi tip objave — pa na prazno platno dodaješ slike i tekst.</p>
           <div className="fmt-list">
             {(
               [
-                ["post", "Objava (Post)", "1080×1350 · 4:5 · jedan medij"],
-                ["story", "Story", "1080×1920 · 9:16 · IG + TikTok"],
-                ["reels", "Reels", "1080×1920 · 9:16 · IG + TikTok"],
-                ["carousel", "Carousel", "1080×1350 · 4:5 · 2–35 slajdova"],
+                ["post", "Objava", "Jedna slika ili video u feed-u."],
+                ["carousel", "Carousel", "Više slika/videa koji se prevlače (do 10)."],
+                ["story", "Story", "Vertikalno 9:16, nestaje za 24h. IG + TikTok."],
+                ["reels", "Reels", "Kratak vertikalni video — najveći domet."],
               ] as [Format, string, string][]
             ).map(([f, title, desc]) => {
               const Ico = FMT_ICON[f];
               return (
-                <button key={f} className="fmt-opt" onClick={() => createProject(f)}>
+                <button key={f} className={`fmt-opt${newFmt === f ? " on" : ""}`} onClick={() => setNewFmt(f)}>
                   <span className="fmt-ico">
                     <Ico />
                   </span>
@@ -2846,13 +2850,21 @@ export default function Studio() {
                     <b>{title}</b>
                     <span>{desc}</span>
                   </span>
+                  {newFmt === f && (
+                    <span className="fmt-check" aria-hidden>
+                      <I.Check />
+                    </span>
+                  )}
                 </button>
               );
             })}
           </div>
-          <div className="modal-foot">
+          <div className="modal-foot" style={{ gap: 10 }}>
             <button className="btn btn-ghost" onClick={() => setNewOpen(false)}>
               Otkaži
+            </button>
+            <button className="btn btn-primary" disabled={!newFmt} onClick={() => newFmt && createProject(newFmt)}>
+              Nastavi <I.Arrow />
             </button>
           </div>
         </div>
