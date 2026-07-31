@@ -89,6 +89,8 @@ export default function Studio() {
   const [project, setProject] = useState<Project | null>(null);
   const [active, setActive] = useState(0);
   const [propTab, setPropTab] = useState<"foto" | "text" | "cta" | "layer" | "brend" | "red" | "ai" | "safe">("text");
+  const [isMobile, setIsMobile] = useState(false);
+  const [wizStep, setWizStep] = useState(0);
   const [sheet, setSheet] = useState<null | "media" | "props">(null);
   const [selId, setSelId] = useState<string | null>(null); // text layer id, "cta", or null
   const [toast, setToast] = useState<string | null>(null);
@@ -193,6 +195,43 @@ export default function Studio() {
     return subscribeLog(() => setLogItems([...getLog()]));
   }, []);
 
+  // prati da li smo na telefonu (za vođeni tok / wizard)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 760px)");
+    const on = () => setIsMobile(mq.matches);
+    on();
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, []);
+
+  // koraci vođenog toka (na telefonu)
+  const wizSteps: { key: string; label: string }[] = fmt
+    ? [
+        { key: "media", label: "Slike i video" },
+        { key: "text", label: "Tekst" },
+        { key: "look", label: "Izgled" },
+        ...(fmt.multi ? [{ key: "anim", label: "Animacija" }] : []),
+        { key: "done", label: "Sačuvaj" },
+      ]
+    : [];
+  const wizard = isMobile && view === "editor";
+  const stepKey = wizSteps[wizStep]?.key ?? "media";
+
+  // svaki ulazak u editor kreće od prvog koraka
+  useEffect(() => {
+    if (view === "editor") setWizStep(0);
+  }, [view]);
+
+  // u vođenom toku, korak diktira koji panel se koristi
+  useEffect(() => {
+    if (!wizard) return;
+    if (stepKey === "media") setPropTab("foto");
+    else if (stepKey === "text") setPropTab("text");
+    else setPropTab("layer"); // inertno — koraci look/anim/done imaju svoj sadržaj
+    setSelId(null);
+  }, [wizard, stepKey]);
+
   const patchSlide = useCallback(
     (patch: Partial<Slide>) => {
       setProject((p) => {
@@ -251,6 +290,7 @@ export default function Studio() {
     setPropTab("text");
     setSelId(null);
     setSafeZone(false);
+    setWizStep(0);
     setView("editor");
     setSheet(null);
   }
@@ -1519,38 +1559,57 @@ export default function Studio() {
               <button className="btn btn-ghost desktop-only" onClick={() => save(false)}>
                 Sačuvaj nacrt
               </button>
-              <button className="btn btn-primary ed-export" onClick={runExport} disabled={!!exportUI}>
-                <I.Export /> {exportUI ? "Izvozim…" : "Izvezi"}
-              </button>
+              {!wizard && (
+                <button className="btn btn-primary ed-export" onClick={runExport} disabled={!!exportUI}>
+                  <I.Export /> {exportUI ? "Izvozim…" : "Izvezi"}
+                </button>
+              )}
             </div>
 
-            <div className="ed-body">
+            <div className={`ed-body${wizard ? " wizard" : ""}`}>
               <div className={`sheet-backdrop${sheet ? " on" : ""}`} onClick={() => setSheet(null)} />
 
-              {/* LEFT: tool rail */}
-              <nav className="tool-rail">
-                {(
-                  [
-                    ["foto", "FOTO", I.ImgIcon],
-                    ["text", "TEKST", I.TextIcon],
-                    ["brend", "BREND", I.Brand],
-                    ["red", "RED", I.Layers],
-                    ["ai", "AI", I.Sparkle],
-                  ] as [typeof propTab, string, React.FC<React.SVGProps<SVGSVGElement>>][]
-                ).map(([key, label, Ico]) => (
-                  <button
-                    key={key}
-                    className={`tool-btn${propTab === key ? " on" : ""}${key === "ai" ? " ai" : ""}`}
-                    onClick={() => setPropTab(key)}
-                  >
-                    <Ico />
-                    {label}
-                  </button>
-                ))}
-              </nav>
+              {/* LEFT: tool rail (desktop) / korak-zaglavlje (mobilni vođeni tok) */}
+              {wizard ? (
+                <div className="wiz-head">
+                  <div className="wiz-dots">
+                    {wizSteps.map((s, i) => (
+                      <span key={s.key} className={`wiz-dot${i === wizStep ? " on" : ""}${i < wizStep ? " done" : ""}`} />
+                    ))}
+                  </div>
+                  <div className="wiz-title">
+                    <span className="wiz-count">
+                      Korak {wizStep + 1} / {wizSteps.length}
+                    </span>
+                    <b>{wizSteps[wizStep]?.label}</b>
+                  </div>
+                </div>
+              ) : (
+                <nav className="tool-rail">
+                  {(
+                    [
+                      ["foto", "FOTO", I.ImgIcon],
+                      ["text", "TEKST", I.TextIcon],
+                      ["brend", "BREND", I.Brand],
+                      ["red", "RED", I.Layers],
+                      ["ai", "AI", I.Sparkle],
+                    ] as [typeof propTab, string, React.FC<React.SVGProps<SVGSVGElement>>][]
+                  ).map(([key, label, Ico]) => (
+                    <button
+                      key={key}
+                      className={`tool-btn${propTab === key ? " on" : ""}${key === "ai" ? " ai" : ""}`}
+                      onClick={() => setPropTab(key)}
+                    >
+                      <Ico />
+                      {label}
+                    </button>
+                  ))}
+                </nav>
+              )}
 
               {/* CENTER: stage */}
               <div className="stage">
+                {!wizard && (
                 <div className="stage-top">
                   {FMT_ORDER.map((k) => {
                     const Ico = FMT_ICON[k];
@@ -1590,6 +1649,7 @@ export default function Studio() {
                     <I.Sparkle style={{ width: 13, height: 13 }} /> AI pomoć
                   </button>
                 </div>
+                )}
 
                 <div className="canvas-wrap">
                   <div
@@ -1809,6 +1869,135 @@ export default function Studio() {
                   </button>
                 </div>
                 <div className="panel-scroll">
+                  {/* ===== VOĐENI TOK — koraci Izgled / Animacija / Sačuvaj ===== */}
+                  {wizard && stepKey === "look" && (
+                    <>
+                      <div className="mono-label" style={{ marginBottom: 4 }}>
+                        Font naslova
+                      </div>
+                      <div className="font-grid">
+                        {HEADING_FONTS.map((f) => (
+                          <button key={f} className={`font-card${brand.headingFont === f ? " on" : ""}`} onClick={() => updateBrand({ headingFont: f })}>
+                            <b style={{ fontFamily: fontCss(f) }}>Ružini kolači</b>
+                            <i>{FONTS.find((x) => x.key === f)?.label}</i>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mono-label sect" style={{ margin: "16px 0 6px" }}>
+                        Font teksta
+                      </div>
+                      <div className="body-seg">
+                        {BODY_FONTS.map((f) => (
+                          <button key={f} className={brand.bodyFont === f ? "on" : ""} style={{ fontFamily: fontCss(f) }} onClick={() => updateBrand({ bodyFont: f })}>
+                            {FONTS.find((x) => x.key === f)?.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="hint" style={{ marginTop: 14 }}>
+                        <I.Info /> Boje i ton se podešavaju u Brendu — važe za sve objave.
+                      </p>
+                    </>
+                  )}
+
+                  {wizard && stepKey === "anim" && (
+                    <>
+                      <div className="field">
+                        <label>Prelaz između strana</label>
+                        <div className="wiz-opts">
+                          {(
+                            [
+                              ["none", "Bez prelaza"],
+                              ["fade", "Pretapanje"],
+                              ["slide", "Klizanje"],
+                            ] as [Project["transition"], string][]
+                          ).map(([v, lbl]) => (
+                            <button key={v} className={`wiz-opt${project.transition === v ? " on" : ""}`} onClick={() => setProject({ ...project, transition: v })}>
+                              {lbl}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="divide" />
+                      <div className="field">
+                        <label>Animacija teksta</label>
+                        <div className="wiz-opts">
+                          {(
+                            [
+                              ["none", "Bez"],
+                              ["fade", "Pojavljivanje"],
+                              ["rise", "Izranjanje"],
+                            ] as [Project["textAnim"], string][]
+                          ).map(([v, lbl]) => (
+                            <button key={v} className={`wiz-opt${project.textAnim === v ? " on" : ""}`} onClick={() => setProject({ ...project, textAnim: v })}>
+                              {lbl}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <button className="btn btn-outline" style={{ width: "100%", marginTop: 14 }} onClick={playPreview}>
+                        <I.Play style={{ width: 15, height: 15 }} /> Pregledaj
+                      </button>
+                    </>
+                  )}
+
+                  {wizard && stepKey === "done" && (
+                    <>
+                      <div className="field">
+                        <label>Opis objave (caption)</label>
+                        <textarea
+                          className="txt-in"
+                          style={{ minHeight: 96, resize: "vertical", paddingTop: 10 }}
+                          value={project.caption ?? ""}
+                          onChange={(e) => setProject({ ...project, caption: e.target.value })}
+                          placeholder="Kratak opis za Instagram/TikTok (nije obavezno)…"
+                        />
+                      </div>
+                      <p className="hint" style={{ marginTop: 12 }}>
+                        <I.Info /> Tapni „Sačuvaj u Photos" dole da objava ode u galeriju.
+                      </p>
+                      <button className="btn btn-ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => save(false)}>
+                        <I.Check style={{ width: 15, height: 15 }} /> Sačuvaj kao nacrt
+                      </button>
+                    </>
+                  )}
+
+                  {/* brza provera bezbedne zone uz korak Tekst */}
+                  {wizard && stepKey === "text" && (() => {
+                    const outCount =
+                      slide.texts.filter((t) => outsideSafe(t.pos.x, t.pos.y)).length +
+                      (slide.cta && outsideSafe(slide.ctaPos.x, slide.ctaPos.y) ? 1 : 0);
+                    return (
+                      <>
+                        <div className="divide" />
+                        <div className="toggle-row">
+                          <b style={{ fontWeight: 500, fontSize: 13.5 }}>Prikaži bezbednu zonu</b>
+                          <button className={`switch${safeZone ? " on" : ""}`} onClick={() => setSafeZone((v) => !v)}>
+                            <i />
+                          </button>
+                        </div>
+                        {outCount > 0 ? (
+                          <div className="safe-viol" style={{ marginTop: 10 }}>
+                            <span className="safe-viol-name">{outCount} van bezbedne zone</span>
+                            <button
+                              className="btn btn-outline"
+                              style={{ height: 32, padding: "0 12px", fontSize: 11.5 }}
+                              onClick={() => {
+                                slide.texts.forEach((t) => {
+                                  if (outsideSafe(t.pos.x, t.pos.y)) patchText(t.id, { pos: clampSafe(t.pos) });
+                                });
+                                if (slide.cta && outsideSafe(slide.ctaPos.x, slide.ctaPos.y)) patchSlide({ ctaPos: clampSafe(slide.ctaPos) });
+                              }}
+                            >
+                              Uvuci sve
+                            </button>
+                          </div>
+                        ) : (
+                          <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 8 }}>Sve je unutar bezbedne zone. 👍</p>
+                        )}
+                      </>
+                    );
+                  })()}
+
                   {/* ---- SAFE ZONE (margine) ---- */}
                   {propTab === "safe" && (
                     <>
@@ -2389,6 +2578,24 @@ export default function Studio() {
               </aside>
             </div>
 
+            {/* Vođeni tok — donja navigacija (Nazad / Dalje) */}
+            {wizard && (
+              <div className="wiz-foot">
+                <button className="btn btn-ghost" onClick={() => (wizStep > 0 ? setWizStep(wizStep - 1) : setView("studio"))}>
+                  <I.Back style={{ width: 15, height: 15 }} /> {wizStep > 0 ? "Nazad" : "Izađi"}
+                </button>
+                {wizStep < wizSteps.length - 1 ? (
+                  <button className="btn btn-primary" onClick={() => setWizStep(wizStep + 1)}>
+                    Dalje <I.Arrow />
+                  </button>
+                ) : (
+                  <button className="btn btn-primary" onClick={runExport} disabled={!!exportUI}>
+                    <I.Export style={{ width: 16, height: 16 }} /> {exportUI ? "Spremam…" : "Sačuvaj u Photos"}
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* MOBILE toolbar */}
             <nav className="mtoolbar">
               <button
@@ -2436,7 +2643,8 @@ export default function Studio() {
         </main>
       </div>
 
-      {/* ===== MOBILE BOTTOM TABS ===== */}
+      {/* ===== MOBILE BOTTOM TABS (sakriveno u vođenom toku) ===== */}
+      {!wizard && (
       <nav className="btabs" style={{ gridTemplateColumns: `repeat(${NAV.length}, 1fr)` }}>
         {NAV.map((n) => {
           const Ico = n.icon;
@@ -2450,6 +2658,7 @@ export default function Studio() {
           );
         })}
       </nav>
+      )}
 
       {/* ===== NEW PROJECT MODAL ===== */}
       <div className={`overlay${newOpen ? " on" : ""}`}>
