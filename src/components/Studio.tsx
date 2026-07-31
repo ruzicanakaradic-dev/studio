@@ -29,6 +29,7 @@ import {
   safeFileName,
   loadImage,
   renderSlidePng,
+  renderSlideJpeg,
   exportSlideVideo,
   exportReelsMontage,
   videoSupported,
@@ -122,7 +123,16 @@ export default function Studio() {
     error?: boolean;
     files?: File[]; // spremni fajlovi za „Sačuvaj u Photos"
     base?: string;
+    permalink?: string; // link objave na Instagramu
+    published?: boolean; // uspešna objava na Instagram
   }>(null);
+  const [igStatus, setIgStatus] = useState<null | {
+    configured: boolean;
+    connected: boolean;
+    username: string | null;
+    expiresAt: string | null;
+  }>(null);
+  const [igBusy, setIgBusy] = useState(false);
   const [vidPlaying, setVidPlaying] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
   const bgVideoRef = useRef<HTMLVideoElement>(null);
@@ -198,6 +208,122 @@ export default function Studio() {
     setLogItems(getLog());
     return subscribeLog(() => setLogItems([...getLog()]));
   }, []);
+
+  // Instagram: status veze + obrada povratka sa Meta prijave (?ig=...)
+  const refreshIg = useCallback(async () => {
+    try {
+      const r = await fetch("/api/instagram/status");
+      if (r.ok) setIgStatus(await r.json());
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshIg();
+    if (typeof window === "undefined") return;
+    const u = new URL(window.location.href);
+    const ig = u.searchParams.get("ig");
+    if (ig) {
+      if (ig === "connected") {
+        showToast("Instagram povezan ✦");
+        logEvent("ok", "Instagram nalog povezan", "Sada možeš da objavljuješ direktno iz Studija.");
+        refreshIg();
+      } else if (ig === "error") showToast("Povezivanje nije uspelo — pokušaj ponovo");
+      else if (ig === "notconfigured") showToast("Instagram još nije podešen");
+      u.searchParams.delete("ig");
+      window.history.replaceState({}, "", u.toString());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshIg]);
+
+  // Objavi trenutni projekat direktno na Instagram (preko servera).
+  async function publishInstagram() {
+    if (!project || igBusy || exportUI) return;
+    if (!igStatus?.connected) {
+      window.location.href = "/api/instagram/connect";
+      return;
+    }
+    const proj = project;
+    const f = FORMAT_META[proj.format];
+    const slides = proj.slides.filter((s) => s.mediaId);
+    if (slides.length === 0) {
+      showToast("Dodaj bar jedan medij pre objave");
+      return;
+    }
+    setIgBusy(true);
+    setExportUI({ pct: 5, label: "Pripremam za Instagram…" });
+    logEvent("info", `Objava na Instagram „${proj.name}"`, `Format: ${f.short} · ${slides.length} ${slides.length === 1 ? "medij" : "medija"}.`);
+    try {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      const width = Math.round(rect?.width || 440);
+      const W = f.w;
+      const H = f.h;
+      const scale = W / width;
+      if (typeof document !== "undefined" && document.fonts?.ready) {
+        try {
+          await document.fonts.ready;
+        } catch {
+          /* ignore */
+        }
+      }
+      const media: { imageUrl?: string; videoUrl?: string }[] = [];
+      for (let i = 0; i < slides.length; i++) {
+        const sl = slides[i];
+        const orig = mediaUrl(sl.mediaId);
+        const isVid = isVideoUrl(orig);
+        setExportUI({ pct: 5 + Math.round((i / slides.length) * 55), label: `Pripremam ${i + 1}/${slides.length}…` });
+        const safe = await toCaptureUrl(orig);
+        if (isVid) {
+          let blob: Blob | null = null;
+          try {
+            const r = await exportSlideVideo({ slide: sl, url: (safe || orig)!, W, H, scale });
+            blob = r.blob;
+          } catch {
+            try {
+              const rr = await fetch((safe || orig)!);
+              blob = await rr.blob();
+            } catch {
+              blob = null;
+            }
+          }
+          if (blob) {
+            const up = await uploadMedia(new File([blob], `ig-${Date.now()}-${i}.mp4`, { type: "video/mp4" }));
+            if (up?.url) media.push({ videoUrl: up.url });
+          }
+        } else {
+          let im: HTMLImageElement | null = null;
+          try {
+            im = safe ? await loadImage(safe) : null;
+          } catch {
+            im = null;
+          }
+          const blob = await renderSlideJpeg(sl, im, W, H, scale);
+          const up = await uploadMedia(new File([blob], `ig-${Date.now()}-${i}.jpg`, { type: "image/jpeg" }));
+          if (up?.url) media.push({ imageUrl: up.url });
+        }
+      }
+      if (media.length === 0) throw new Error("Priprema medija za Instagram nije uspela (proveri Supabase Storage).");
+      setExportUI({ pct: 72, label: proj.format === "reels" || media.some((m) => m.videoUrl) ? "Objavljujem video…" : "Objavljujem na Instagram…" });
+      const res = await fetch("/api/instagram/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ format: proj.format, items: media, caption: proj.caption ?? "" }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Objava nije uspela.");
+      setExportUI({ pct: 100, label: "Objavljeno na Instagram ✦", permalink: data.permalink || undefined, published: true });
+      logEvent("ok", "Objavljeno na Instagram", proj.caption ? "Objava je otišla sa opisom i hashtagovima." : "Objava je otišla (bez opisa).");
+      void save(false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Objava nije uspela.";
+      setExportUI({ pct: 100, label: "Instagram objava nije uspela", error: true });
+      logEvent("error", "Instagram objava nije uspela", msg);
+      showToast(msg);
+    } finally {
+      setIgBusy(false);
+    }
+  }
 
   // podnaslov na naslovnoj — prati stvarni dan u nedelji (računa se na klijentu)
   useEffect(() => {
@@ -2228,8 +2354,28 @@ export default function Studio() {
                           {project.caption ? " · ima opis" : ""}.
                         </p>
                       </div>
+                      {/* Instagram — direktna objava */}
+                      {igStatus?.connected ? (
+                        <div className="ig-block on">
+                          <div className="ig-row">
+                            <span className="ig-badge"><I.FmtReels style={{ width: 14, height: 14 }} /> Instagram</span>
+                            <span className="ig-user">@{igStatus.username}</span>
+                          </div>
+                          <button className="btn btn-ig" style={{ width: "100%", marginTop: 10 }} onClick={publishInstagram} disabled={igBusy || !!exportUI}>
+                            <I.Export style={{ width: 16, height: 16 }} /> {igBusy ? "Objavljujem…" : "Objavi na Instagram"}
+                          </button>
+                        </div>
+                      ) : igStatus?.configured ? (
+                        <div className="ig-block">
+                          <p className="ig-note">Poveži Instagram nalog da objavljuješ direktno iz Studija.</p>
+                          <button className="btn btn-ig" style={{ width: "100%", marginTop: 8 }} onClick={() => (window.location.href = "/api/instagram/connect")}>
+                            <I.FmtReels style={{ width: 15, height: 15 }} /> Poveži Instagram
+                          </button>
+                        </div>
+                      ) : null}
+
                       {/* Čuvanje odmah na vrhu koraka — bez skrolovanja */}
-                      <button className="btn btn-primary" style={{ width: "100%", marginTop: 4 }} onClick={runExport} disabled={!!exportUI}>
+                      <button className="btn btn-primary" style={{ width: "100%", marginTop: 12 }} onClick={runExport} disabled={!!exportUI}>
                         <I.Export style={{ width: 16, height: 16 }} /> {exportUI ? "Spremam…" : "Sačuvaj u Photos"}
                       </button>
                       <button className="btn btn-ghost" style={{ width: "100%", marginTop: 10 }} onClick={() => save(false)}>
@@ -3054,6 +3200,20 @@ export default function Studio() {
                   }}
                 >
                   ili preuzmi na uređaj
+                </button>
+              </>
+            ) : exportUI.published ? (
+              <>
+                <p className="export-hint" style={{ marginTop: 2, marginBottom: 12 }}>
+                  Objava je otišla na Instagram sa tvojim opisom i hashtagovima.
+                </p>
+                {exportUI.permalink ? (
+                  <a className="btn btn-primary" style={{ width: "100%", height: 46, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }} href={exportUI.permalink} target="_blank" rel="noopener noreferrer">
+                    <I.Arrow style={{ width: 16, height: 16 }} /> Otvori na Instagramu
+                  </a>
+                ) : null}
+                <button className="btn btn-text" style={{ marginTop: 8 }} onClick={() => setExportUI(null)}>
+                  Zatvori
                 </button>
               </>
             ) : (

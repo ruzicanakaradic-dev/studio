@@ -355,6 +355,27 @@ export async function renderSlidePng(slide: Slide, media: Media | null, W: numbe
   return canvasToBlob(canvas);
 }
 
+/** JPEG varijanta — Instagram API prima samo JPEG za slike. Pozadina je bela (bez providnosti). */
+export async function renderSlideJpeg(
+  slide: Slide,
+  media: Media | null,
+  W: number,
+  H: number,
+  scale: number,
+): Promise<Blob> {
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("no-2d");
+  ctx.fillStyle = "#FBF6EE";
+  ctx.fillRect(0, 0, W, H);
+  drawSlideArt(ctx, slide, media, W, H, scale);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob-null"))), "image/jpeg", 0.92);
+  });
+}
+
 // ---------------- ZIP ----------------
 
 export async function zipMixed(items: { name: string; blob: Blob }[]): Promise<Blob> {

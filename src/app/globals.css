@@ -53,6 +53,17 @@ img{display:block;max-width:100%}
 .btn-gold:hover{background:var(--gold-600)}
 .btn-ghost{background:var(--paper);border:1px solid var(--line);color:var(--ink)}
 .btn-ghost:hover{border-color:var(--plum-300);color:var(--plum)}
+.btn-ig{background:linear-gradient(95deg,#F58529,#DD2A7B 45%,#8134AF 78%,#515BD4);color:#fff;border:none}
+.btn-ig:hover{filter:brightness(1.05)}
+.btn-ig:disabled{opacity:.6}
+
+/* Instagram blok u koraku Sačuvaj */
+.ig-block{margin-top:6px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--paper)}
+.ig-block.on{border-color:var(--plum-300);background:var(--lav-soft)}
+.ig-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ig-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--plum)}
+.ig-user{font-size:13px;font-weight:700;color:var(--ink)}
+.ig-note{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0}
 .icon-btn{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;
   background:var(--paper);border:1px solid var(--line);color:var(--plum);transition:.15s;flex:0 0 auto}
 .icon-btn:hover{border-color:var(--plum-300)}
