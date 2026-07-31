@@ -90,6 +90,7 @@ export default function Studio() {
   const [active, setActive] = useState(0);
   const [propTab, setPropTab] = useState<"foto" | "text" | "cta" | "layer" | "brend" | "red" | "ai" | "safe">("text");
   const [isMobile, setIsMobile] = useState(false);
+  const [daySub, setDaySub] = useState("Vreme je za nove kolače.");
   const [wizStep, setWizStep] = useState(0);
   const [wizCaps, setWizCaps] = useState<{ kicker: string; text: string }[]>([]);
   const [sheet, setSheet] = useState<null | "media" | "props">(null);
@@ -196,6 +197,20 @@ export default function Studio() {
   useEffect(() => {
     setLogItems(getLog());
     return subscribeLog(() => setLogItems([...getLog()]));
+  }, []);
+
+  // podnaslov na naslovnoj — prati stvarni dan u nedelji (računa se na klijentu)
+  useEffect(() => {
+    const subByDay = [
+      "Nedelja je — dan za miran, sladak zalogaj.", // 0
+      "Ponedeljak je — nova nedelja, novi kolači.", // 1
+      "Utorak je — vreme za sledeću objavu.", // 2
+      "Sreda je — polovina nedelje, ne staje se.", // 3
+      "Četvrtak je — vikend se bliži, spremi porudžbine.", // 4
+      "Petak je — vikend traži kolače.", // 5
+      "Subota je — najslađi dan u nedelji.", // 6
+    ];
+    setDaySub(subByDay[new Date().getDay()]);
   }, []);
 
   // prati da li smo na telefonu (za vođeni tok / wizard)
@@ -1041,7 +1056,7 @@ export default function Studio() {
                   <h1 className="page-title">
                     Zdravo, Ružice <span style={{ fontFamily: "var(--font-body)" }}>👋</span>
                   </h1>
-                  <p className="page-sub">Petak je — vikend traži kolače.</p>
+                  <p className="page-sub">{daySub}</p>
                 </div>
                 <button className="btn btn-primary btn-cta" onClick={openNew}>
                   Nova objava <I.Arrow />
