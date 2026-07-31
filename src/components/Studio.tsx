@@ -650,12 +650,20 @@ export default function Studio() {
   // ---- background pan (kadriranje) ----
   function startBgPan(e: React.PointerEvent) {
     if (!slide?.mediaId) return;
+    if (slide.zoom <= 1) return; // pomeranje (kadriranje) samo kad je slika zumirana
     const canvas = canvasRef.current;
     if (!canvas) return;
+    e.preventDefault();
+    try {
+      canvas.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* ignore */
+    }
     const rect = canvas.getBoundingClientRect();
     const start = { x: e.clientX, y: e.clientY };
     const origin = { ...slide.focus };
     const move = (ev: PointerEvent) => {
+      ev.preventDefault();
       const dx = ((ev.clientX - start.x) / rect.width) * 100;
       const dy = ((ev.clientY - start.y) / rect.height) * 100;
       const fx = Math.max(0, Math.min(100, origin.x - dx));
@@ -671,7 +679,7 @@ export default function Studio() {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
     };
-    window.addEventListener("pointermove", move);
+    window.addEventListener("pointermove", move, { passive: false });
     window.addEventListener("pointerup", up);
   }
 
@@ -1750,6 +1758,8 @@ export default function Studio() {
                     className="canvas"
                     style={{
                       aspectRatio: fmt.ratio,
+                      // dok je slika zumirana, dodir pomera sliku (ne skroluje stranu)
+                      touchAction: slide.zoom > 1 ? "none" : "auto",
                       ...(fmt.ratio === "9 / 16"
                         ? { height: "min(72vh,560px)", width: "auto" }
                         : { width: "min(94%,440px)", height: "auto" }),
