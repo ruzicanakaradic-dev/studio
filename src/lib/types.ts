@@ -1,5 +1,5 @@
 export type Format = "post" | "story" | "reels" | "carousel";
-export type CtaStyle = "cta-fill" | "cta-solid" | "cta-outline";
+export type CtaStyle = "cta-fill" | "cta-solid" | "cta-outline" | "cta-ghost";
 export type Align = "left" | "center" | "right";
 
 export interface Pos {
@@ -25,6 +25,7 @@ export interface Slide {
   cta: boolean;
   ctaText: string;
   ctaStyle: CtaStyle;
+  ctaFont?: string; // ključ iz FONTS — font CTA dugmeta (default: archivo)
   ctaPos: Pos;
   scrim: number;
   zoom: number; // 1..3 — uvećanje slike
@@ -91,12 +92,26 @@ export interface MediaItem {
 }
 
 export const TEXT_COLORS = [
+  // svetli / neutralni
   "#FFFFFF",
   "#F5EDE0",
+  "#000000",
+  "#8A7B6B",
+  // zlatna / topla
   "#C9A96E",
+  "#E4C97E",
+  "#D68C45",
+  "#7A5C3E",
+  // roze / mauve
+  "#F2C4CE",
+  "#C25B6E",
+  // ljubičasta / brend
   "#C4B1D9",
   "#4A3566",
   "#2A2033",
+  // zelena / plava
+  "#8BA888",
+  "#2E5D63",
 ];
 
 export interface SafeInset {

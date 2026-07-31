@@ -223,9 +223,11 @@ function drawCta(ctx: CanvasRenderingContext2D, slide: Slide, W: number, H: numb
   const padY = 12 * scale;
   const gap = 8 * scale;
   const arrowW = fs * 0.85;
-  ctx.font = `700 ${fs}px ${resolveFamily("var(--font-body), system-ui, sans-serif")}`;
+  const ctaFamily = resolveFamily(fontCss(slide.ctaFont ?? "archivo"));
+  ctx.font = `700 ${fs}px ${ctaFamily}`;
   const text = slide.ctaText || "Naruči";
   const tw = ctx.measureText(text).width;
+  const ghost = slide.ctaStyle === "cta-ghost";
   const w = padX * 2 + tw + gap + arrowW;
   const h = fs + padY * 2;
   const x = (slide.ctaPos.x / 100) * W;
@@ -241,6 +243,35 @@ function drawCta(ctx: CanvasRenderingContext2D, slide: Slide, W: number, H: numb
     bg = "rgba(255,255,255,0.14)";
     fg = "#ffffff";
     border = "#ffffff";
+  } else if (ghost) {
+    fg = "#ffffff";
+  }
+
+  if (ghost) {
+    // bez pozadine i obrisa — samo tekst sa senkom radi čitljivosti
+    ctx.save();
+    ctx.fillStyle = fg;
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0,0,0,0.55)";
+    ctx.shadowBlur = 8 * scale;
+    ctx.shadowOffsetY = 1 * scale;
+    const gx = x + padX * 0.2;
+    ctx.fillText(text, gx, y + h / 2 + 1 * scale);
+    const gaxx = gx + tw + gap;
+    const gcy = y + h / 2;
+    ctx.strokeStyle = fg;
+    ctx.lineWidth = Math.max(1.5, 2 * scale);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(gaxx, gcy);
+    ctx.lineTo(gaxx + arrowW, gcy);
+    ctx.moveTo(gaxx + arrowW - fs * 0.28, gcy - fs * 0.26);
+    ctx.lineTo(gaxx + arrowW, gcy);
+    ctx.lineTo(gaxx + arrowW - fs * 0.28, gcy + fs * 0.26);
+    ctx.stroke();
+    ctx.restore();
+    return;
   }
 
   ctx.save();

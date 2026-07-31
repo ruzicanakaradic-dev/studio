@@ -78,6 +78,7 @@ function normalizeSlide(raw: unknown): Slide {
     cta: (s.cta as boolean) ?? base.cta,
     ctaText: (s.ctaText as string) ?? base.ctaText,
     ctaStyle: (s.ctaStyle as Slide["ctaStyle"]) ?? base.ctaStyle,
+    ctaFont: (s.ctaFont as string) ?? base.ctaFont ?? "archivo",
     ctaPos,
     scrim: (s.scrim as number) ?? base.scrim,
     zoom: (s.zoom as number) ?? base.zoom,

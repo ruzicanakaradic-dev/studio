@@ -1902,7 +1902,7 @@ export default function Studio() {
                             style={{ left: `${slide.ctaPos.x}%`, top: `${slide.ctaPos.y}%`, ...textAnimStyle(0.28) }}
                             onPointerDown={(e) => startDrag({ kind: "cta" }, e)}
                           >
-                            <span className={`ov-cta ${slide.ctaStyle}`}>
+                            <span className={`ov-cta ${slide.ctaStyle}`} style={{ fontFamily: fontCss(slide.ctaFont ?? "archivo") }}>
                               {slide.ctaText} <I.Arrow />
                             </span>
                           </div>
@@ -2213,20 +2213,24 @@ export default function Studio() {
                           {project.caption ? " · ima opis" : ""}.
                         </p>
                       </div>
+                      {/* Čuvanje odmah na vrhu koraka — bez skrolovanja */}
+                      <button className="btn btn-primary" style={{ width: "100%", marginTop: 4 }} onClick={runExport} disabled={!!exportUI}>
+                        <I.Export style={{ width: 16, height: 16 }} /> {exportUI ? "Spremam…" : "Sačuvaj u Photos"}
+                      </button>
+                      <button className="btn btn-ghost" style={{ width: "100%", marginTop: 10 }} onClick={() => save(false)}>
+                        <I.Check style={{ width: 15, height: 15 }} /> Sačuvaj kao nacrt
+                      </button>
+                      <p className="hint" style={{ marginTop: 12 }}>
+                        <I.Info /> „Sačuvaj u Photos" šalje objavu u galeriju telefona. „Sačuvaj kao nacrt" je ostavlja u Studiju za kasnije.
+                      </p>
                       {project.caption ? (
-                        <div className="field">
+                        <div className="field" style={{ marginTop: 14 }}>
                           <label>Opis objave</label>
                           <p style={{ fontSize: 13, color: "var(--ink)", lineHeight: 1.5, background: "var(--cream-2)", border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px", whiteSpace: "pre-wrap" }}>
                             {project.caption}
                           </p>
                         </div>
                       ) : null}
-                      <p className="hint" style={{ marginTop: 12 }}>
-                        <I.Info /> Tapni „Sačuvaj u Photos" dole da objava ode u galeriju.
-                      </p>
-                      <button className="btn btn-ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => save(false)}>
-                        <I.Check style={{ width: 15, height: 15 }} /> Sačuvaj kao nacrt
-                      </button>
                     </>
                   )}
 
@@ -2639,6 +2643,21 @@ export default function Studio() {
                           ))}
                         </div>
                       </div>
+                      <div className="field">
+                        <label>Font dugmeta</label>
+                        <select
+                          className="mini-select"
+                          style={{ width: "100%", height: 42 }}
+                          value={slide.ctaFont ?? "archivo"}
+                          onChange={(e) => patchSlide({ ctaFont: e.target.value })}
+                        >
+                          {FONTS.map((f) => (
+                            <option key={f.key} value={f.key}>
+                              {f.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                       <div className="divide" />
                       <div className="field">
                         <label>Stil dugmeta</label>
@@ -2648,6 +2667,7 @@ export default function Studio() {
                               ["cta-fill", "Zlatno"],
                               ["cta-solid", "Ljubičasto"],
                               ["cta-outline", "Obris"],
+                              ["cta-ghost", "Bez pozadine"],
                             ] as [CtaStyle, string][]
                           ).map(([cs, label]) => (
                             <button key={cs} className={slide.ctaStyle === cs ? "on" : ""} onClick={() => patchSlide({ ctaStyle: cs })}>

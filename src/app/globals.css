@@ -184,6 +184,7 @@ img{display:block;max-width:100%}
 .cta-fill{background:var(--gold);color:var(--plum-700)}
 .cta-outline{background:rgba(255,255,255,.14);color:#fff;border:1.6px solid #fff;backdrop-filter:blur(3px)}
 .cta-solid{background:var(--plum);color:#fff}
+.cta-ghost{background:transparent;color:#fff;box-shadow:none;padding:6px 4px;text-shadow:0 1px 8px rgba(0,0,0,.55)}
 
 .canvas .ig-top{position:absolute;top:14px;left:14px;right:14px;display:flex;align-items:center;gap:9px;pointer-events:none}
 .canvas .ig-top .dot{width:30px;height:30px;border-radius:50%;background:linear-gradient(150deg,var(--gold),var(--lav));border:2px solid #fff}
@@ -677,4 +678,7 @@ textarea.txt-in{min-height:64px;line-height:1.4}
   .nova-preview{overflow:visible;flex:none;padding:8px 16px 16px;display:block;background:transparent}
   .nova-preview .preview-post{max-width:100%;margin:0 auto}
   .np-grid{grid-template-columns:repeat(3,1fr)}
+
+  /* iOS: spreči auto-zoom celog ekrana pri fokusu na polje (font < 16px ga izaziva) */
+  .txt-in,textarea.txt-in,.mini-select,select,input[type="text"],input:not([type]){font-size:16px}
 }
