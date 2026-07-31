@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Align, CtaStyle, Format, MediaItem, Project, Slide } from "@/lib/types";
 import { FORMAT_META, TEXT_COLORS, FONTS, fontCss } from "@/lib/types";
-import { newProject, freshSlide, freshText, mediaUrl } from "@/lib/samples";
+import { newProject, freshSlide, freshEmptySlide, freshText, mediaUrl } from "@/lib/samples";
 import { fetchProjects, fetchMedia, persistProject, uploadMedia, deleteProject } from "@/lib/store";
 import {
   type BrandProfile,
@@ -91,6 +91,7 @@ export default function Studio() {
   const [propTab, setPropTab] = useState<"foto" | "text" | "cta" | "layer" | "brend" | "red" | "ai" | "safe">("text");
   const [isMobile, setIsMobile] = useState(false);
   const [wizStep, setWizStep] = useState(0);
+  const [wizCaps, setWizCaps] = useState<{ kicker: string; text: string }[]>([]);
   const [sheet, setSheet] = useState<null | "media" | "props">(null);
   const [selId, setSelId] = useState<string | null>(null); // text layer id, "cta", or null
   const [toast, setToast] = useState<string | null>(null);
@@ -226,9 +227,8 @@ export default function Studio() {
   // u vođenom toku, korak diktira koji panel se koristi
   useEffect(() => {
     if (!wizard) return;
-    if (stepKey === "media") setPropTab("foto");
-    else if (stepKey === "text") setPropTab("text");
-    else setPropTab("layer"); // inertno — koraci look/anim/done imaju svoj sadržaj
+    if (stepKey === "text") setPropTab("text");
+    else setPropTab("layer"); // media/look/anim/done imaju svoj sadržaj
     setSelId(null);
   }, [wizard, stepKey]);
 
@@ -296,11 +296,17 @@ export default function Studio() {
   }
   function createProject(format: Format) {
     setNewOpen(false);
-    openEditor(newProject(format));
+    // prazan canvas — bez teksta i CTA
+    const p = newProject(format, "Nova objava");
+    p.slides = [freshEmptySlide(null)];
+    p.caption = "";
+    openEditor(p);
   }
   function onNav(k: string) {
     if (k === "nova") {
-      setView("nova");
+      // na telefonu: prvo izbor tipa objave → prazan canvas (vođeni tok)
+      if (isMobile) setNewOpen(true);
+      else setView("nova");
       return;
     }
     if (k === "platno") {
@@ -684,6 +690,42 @@ export default function Studio() {
   function pickMedia(id: string) {
     patchSlide({ mediaId: id });
     if (window.innerWidth <= 760) setSheet(null);
+  }
+  // vođeni tok: dodaj/ukloni medij kao stranu (dozvoljava više slika/videa, mešano)
+  function wizToggleMedia(id: string) {
+    if (!project) return;
+    const slides = [...project.slides];
+    const used = slides.findIndex((s) => s.mediaId === id);
+    let nextActive = active;
+    if (used >= 0) {
+      if (slides.length > 1) {
+        slides.splice(used, 1);
+        nextActive = Math.max(0, Math.min(active, slides.length - 1));
+      } else {
+        slides[0] = { ...slides[0], mediaId: null };
+        nextActive = 0;
+      }
+    } else {
+      const emptyIdx = slides.findIndex((s) => !s.mediaId);
+      if (emptyIdx >= 0) {
+        slides[emptyIdx] = { ...slides[emptyIdx], mediaId: id };
+        nextActive = emptyIdx;
+      } else {
+        slides.push(freshEmptySlide(id));
+        nextActive = slides.length - 1;
+      }
+    }
+    setProject({ ...project, slides, coverMediaId: slides[0]?.mediaId ?? null });
+    setActive(nextActive);
+  }
+  function slideIndexForMedia(id: string): number {
+    return project ? project.slides.findIndex((s) => s.mediaId === id) : -1;
+  }
+  // vođeni tok: AI predlog opisa (caption)
+  async function doWizCaption() {
+    const idea = (project?.caption || project?.name || "domaći kolači").trim();
+    const d = await askAI("captions3", { idea, format: fmt?.short });
+    if (d?.options) setWizCaps(d.options);
   }
   function addSlide() {
     setProject((p) => {
@@ -1809,7 +1851,7 @@ export default function Studio() {
                   </div>
                 </div>
 
-                {fmt.multi && (
+                {(fmt.multi || (wizard && project.slides.length > 1)) && (
                   <div className="carousel">
                     <span className="carousel-label">
                       {fmt.slideLabel} {active + 1}/{project.slides.length}
@@ -1832,9 +1874,11 @@ export default function Studio() {
                         );
                       })}
                     </div>
-                    <button className="add-slide" onClick={addSlide} title={`Dodaj ${fmt.slideLabel.toLowerCase()}`}>
-                      <I.Plus />
-                    </button>
+                    {!wizard && (
+                      <button className="add-slide" onClick={addSlide} title={`Dodaj ${fmt.slideLabel.toLowerCase()}`}>
+                        <I.Plus />
+                      </button>
+                    )}
                     {project.slides.length > 1 && (
                       <button
                         className="add-slide"
@@ -1846,16 +1890,18 @@ export default function Studio() {
                       </button>
                     )}
                     <span style={{ flex: 1 }} />
-                    <select
-                      className="mini-select"
-                      value={project.transition}
-                      onChange={(e) => setProject({ ...project, transition: e.target.value as Project["transition"] })}
-                      title="Prelaz između slajdova"
-                    >
-                      <option value="none">Prelaz: bez</option>
-                      <option value="fade">Prelaz: pretapanje</option>
-                      <option value="slide">Prelaz: klizanje</option>
-                    </select>
+                    {!wizard && (
+                      <select
+                        className="mini-select"
+                        value={project.transition}
+                        onChange={(e) => setProject({ ...project, transition: e.target.value as Project["transition"] })}
+                        title="Prelaz između slajdova"
+                      >
+                        <option value="none">Prelaz: bez</option>
+                        <option value="fade">Prelaz: pretapanje</option>
+                        <option value="slide">Prelaz: klizanje</option>
+                      </select>
+                    )}
                   </div>
                 )}
               </div>
@@ -1869,6 +1915,116 @@ export default function Studio() {
                   </button>
                 </div>
                 <div className="panel-scroll">
+                  {/* ===== VOĐENI TOK — opis (caption) + AI, iznad teksta na slici ===== */}
+                  {wizard && stepKey === "text" && (
+                    <>
+                      <div className="field">
+                        <label>Opis objave (caption)</label>
+                        <textarea
+                          className="txt-in"
+                          style={{ minHeight: 84, resize: "vertical", paddingTop: 10 }}
+                          value={project.caption ?? ""}
+                          onChange={(e) => setProject({ ...project, caption: e.target.value })}
+                          placeholder="Napiši par reči o objavi (ili pusti AI da predloži)…"
+                        />
+                        <button className="btn btn-primary" style={{ width: "100%", marginTop: 10 }} disabled={!!aiBusy} onClick={doWizCaption}>
+                          <I.Sparkle /> {aiBusy === "captions3" ? "AI piše…" : "AI predlog opisa"}
+                        </button>
+                        {aiMsg && (
+                          <p className="hint" style={{ marginTop: 10 }}>
+                            <I.Info /> {aiMsg}
+                          </p>
+                        )}
+                        {wizCaps.length > 0 && (
+                          <div className="cap-list">
+                            {wizCaps.map((c, i) => (
+                              <button
+                                key={i}
+                                className={`cap-card${project.caption === c.text ? " on" : ""}`}
+                                onClick={() => setProject({ ...project, caption: c.text })}
+                              >
+                                <span className="radio-dot" />
+                                <span>
+                                  <span className="mono-label">{c.kicker}</span>
+                                  <p>{c.text}</p>
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="divide" />
+                      <div className="mono-label" style={{ marginBottom: 8 }}>
+                        Tekst preko slike (nije obavezno)
+                      </div>
+                    </>
+                  )}
+
+                  {/* ===== VOĐENI TOK ===== */}
+                  {wizard && stepKey === "media" && (
+                    <>
+                      <div className="media-tabs" style={{ padding: "0 0 12px" }}>
+                        <button className={`chip${mediaType === "image" ? " on" : ""}`} onClick={() => setMediaType("image")}>
+                          Slike
+                        </button>
+                        <button className={`chip${mediaType === "video" ? " on" : ""}`} onClick={() => setMediaType("video")}>
+                          Video
+                        </button>
+                      </div>
+                      <div className="media-grid">
+                        <button className="upload-tile" onClick={() => fileRef.current?.click()}>
+                          <I.Upload />
+                          Otpremi svoju
+                        </button>
+                        {media
+                          .filter((m) => m.kind === mediaType)
+                          .map((m) => {
+                            const idx = slideIndexForMedia(m.id);
+                            return (
+                              <button key={m.id} className={`media-tile${idx >= 0 ? " sel" : ""}`} onClick={() => wizToggleMedia(m.id)}>
+                                {isVideoUrl(m.url) ? <video src={m.url} muted playsInline preload="metadata" /> : <img src={m.url} alt={m.name} />}
+                                {m.kind === "video" && (
+                                  <span className="vtag">
+                                    <I.Play />
+                                  </span>
+                                )}
+                                {idx >= 0 && <span className="np-badge">{idx + 1}</span>}
+                              </button>
+                            );
+                          })}
+                      </div>
+                      <input ref={fileRef} type="file" accept="image/*,video/*" hidden onChange={onUpload} />
+                      <p className="hint" style={{ marginTop: 12 }}>
+                        <I.Info /> Tapni više slika i/ili videa — svaka postaje strana. Slike i video mogu da se mešaju.
+                      </p>
+                      {slide.mediaId && (
+                        <>
+                          <div className="divide" />
+                          <div className="field">
+                            <label>Nameštanje slike (zum)</label>
+                            <div className="range-row">
+                              <input
+                                type="range"
+                                className="range"
+                                min={100}
+                                max={300}
+                                value={Math.round(slide.zoom * 100)}
+                                onChange={(e) => patchSlide({ zoom: +e.target.value / 100 })}
+                              />
+                              <span className="range-val">{Math.round(slide.zoom * 100)}%</span>
+                            </div>
+                            <button className="chip" style={{ marginTop: 10 }} onClick={() => patchSlide({ zoom: 1, focus: { x: 50, y: 50 } })}>
+                              Resetuj kadar
+                            </button>
+                            <p className="hint" style={{ marginTop: 10 }}>
+                              <I.Info /> Prevuci sliku po platnu da je pomeriš, zumom je uvećaj.
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+
                   {/* ===== VOĐENI TOK — koraci Izgled / Animacija / Sačuvaj ===== */}
                   {wizard && stepKey === "look" && (
                     <>
@@ -1943,15 +2099,21 @@ export default function Studio() {
                   {wizard && stepKey === "done" && (
                     <>
                       <div className="field">
-                        <label>Opis objave (caption)</label>
-                        <textarea
-                          className="txt-in"
-                          style={{ minHeight: 96, resize: "vertical", paddingTop: 10 }}
-                          value={project.caption ?? ""}
-                          onChange={(e) => setProject({ ...project, caption: e.target.value })}
-                          placeholder="Kratak opis za Instagram/TikTok (nije obavezno)…"
-                        />
+                        <label>Pregled pre čuvanja</label>
+                        <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.5, marginTop: 4 }}>
+                          {project.slides.filter((s) => s.mediaId).length || 0}{" "}
+                          {project.slides.filter((s) => s.mediaId).length === 1 ? "strana" : "strane/strana"} · {fmt.short}
+                          {project.caption ? " · ima opis" : ""}.
+                        </p>
                       </div>
+                      {project.caption ? (
+                        <div className="field">
+                          <label>Opis objave</label>
+                          <p style={{ fontSize: 13, color: "var(--ink)", lineHeight: 1.5, background: "var(--cream-2)", border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px", whiteSpace: "pre-wrap" }}>
+                            {project.caption}
+                          </p>
+                        </div>
+                      ) : null}
                       <p className="hint" style={{ marginTop: 12 }}>
                         <I.Info /> Tapni „Sačuvaj u Photos" dole da objava ode u galeriju.
                       </p>

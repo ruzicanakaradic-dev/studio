@@ -62,6 +62,22 @@ export function freshSlide(mediaId: string | null = null): Slide {
   };
 }
 
+/** Prazan slajd — bez teksta i bez CTA (za nove objave: čist canvas). */
+export function freshEmptySlide(mediaId: string | null = null): Slide {
+  return {
+    id: uid("slide"),
+    mediaId,
+    texts: [],
+    cta: false,
+    ctaText: "Naruči",
+    ctaStyle: "cta-fill",
+    ctaPos: { x: 8, y: 87 },
+    scrim: 0,
+    zoom: 1,
+    focus: { x: 50, y: 50 },
+  };
+}
+
 export function newProject(format: Format, name = "Bez naziva", mediaId: string | null = null): Project {
   return {
     id: uid("proj"),
