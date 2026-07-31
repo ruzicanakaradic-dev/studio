@@ -645,7 +645,9 @@ textarea.txt-in{min-height:64px;line-height:1.4}
 .wiz-foot .btn{height:46px}
 .wiz-foot .btn-primary{flex:1}
 .wiz-foot .btn-ghost{flex:0 0 auto;min-width:104px}
-.ed-body.wizard{padding-bottom:calc(86px + env(safe-area-inset-bottom))}
+.ed-body.wizard{padding-bottom:calc(104px + env(safe-area-inset-bottom));overflow-anchor:none}
+.ed-body.wizard .panel-r{flex:0 0 auto}
+.ed-body.wizard *{overflow-anchor:none}
 
 /* ═══════════ MOBILNI EDITOR — vertikalni raspored (mora biti na kraju fajla
    da nadjača bazne .tool-rail/.panel-r definicije; media query ne diže specifičnost) ═══════════ */
