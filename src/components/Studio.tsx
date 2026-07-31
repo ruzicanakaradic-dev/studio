@@ -127,6 +127,8 @@ export default function Studio() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const bgVideoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -725,6 +727,39 @@ export default function Studio() {
   function slideIndexForMedia(id: string): number {
     return project ? project.slides.findIndex((s) => s.mediaId === id) : -1;
   }
+  // vođeni tok: upload iz Photos galerije / kamere — svaka datoteka postaje strana
+  async function onWizUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (files.length === 0) return;
+    setExportUI(null);
+    showToast(files.length > 1 ? `Otpremam ${files.length}…` : "Otpremam…");
+    const items: MediaItem[] = [];
+    for (const f of files) {
+      const it = await uploadMedia(f);
+      if (it) items.push(it);
+    }
+    if (items.length === 0) {
+      showToast("Otpremanje radi kad je Supabase Storage povezan");
+      logEvent("warn", "Otpremanje nije uspelo", "Medij nije otpremljen — proveri vezu sa skladištem (Supabase).");
+      return;
+    }
+    setMedia((m) => [...items, ...m]);
+    const baseP = project;
+    if (baseP) {
+      const slides = [...baseP.slides];
+      for (const it of items) {
+        const emptyIdx = slides.findIndex((s) => !s.mediaId);
+        if (emptyIdx >= 0) slides[emptyIdx] = { ...slides[emptyIdx], mediaId: it.id };
+        else slides.push(freshEmptySlide(it.id));
+      }
+      setProject({ ...baseP, slides, coverMediaId: slides[0]?.mediaId ?? null });
+      setActive(slides.length - 1);
+    }
+    showToast(items.length > 1 ? `Dodato ${items.length}` : "Dodato");
+    logEvent("ok", `Dodat${items.length > 1 ? "o " + items.length + " medija" : " medij"}`, "Medij je otpremljen i dodat na platno.");
+  }
+
   // vođeni tok: AI predlog opisa (caption)
   async function doWizCaption() {
     const idea = (project?.caption || project?.name || "domaći kolači").trim();
@@ -1759,8 +1794,8 @@ export default function Studio() {
                       ) : (
                         <div className="empty">
                           <I.ImgIcon />
-                          <b>Izaberi sliku</b>
-                          <span>Klikni na medij levo da započneš dizajn</span>
+                          <b>Dodaj sliku ili video</b>
+                          <span>{wizard ? "Iz galerije ili kamerom — ispod" : "Klikni na medij levo da započneš dizajn"}</span>
                         </div>
                       )}
                       <div className="scrim" style={{ opacity: slide.mediaId ? slide.scrim / 100 : 0 }} />
@@ -1964,48 +1999,14 @@ export default function Studio() {
                     </>
                   )}
 
-                  {/* ===== VOĐENI TOK ===== */}
+                  {/* ===== VOĐENI TOK — Slike i video (telefon: Galerija / Kamera) ===== */}
                   {wizard && stepKey === "media" && (
                     <>
-                      <div className="media-tabs" style={{ padding: "0 0 12px" }}>
-                        <button className={`chip${mediaType === "image" ? " on" : ""}`} onClick={() => setMediaType("image")}>
-                          Slike
-                        </button>
-                        <button className={`chip${mediaType === "video" ? " on" : ""}`} onClick={() => setMediaType("video")}>
-                          Video
-                        </button>
-                      </div>
-                      <div className="media-grid">
-                        <button className="upload-tile" onClick={() => fileRef.current?.click()}>
-                          <I.Upload />
-                          Otpremi svoju
-                        </button>
-                        {media
-                          .filter((m) => m.kind === mediaType)
-                          .map((m) => {
-                            const idx = slideIndexForMedia(m.id);
-                            return (
-                              <button key={m.id} className={`media-tile${idx >= 0 ? " sel" : ""}`} onClick={() => wizToggleMedia(m.id)}>
-                                {isVideoUrl(m.url) ? <video src={m.url} muted playsInline preload="metadata" /> : <img src={m.url} alt={m.name} />}
-                                {m.kind === "video" && (
-                                  <span className="vtag">
-                                    <I.Play />
-                                  </span>
-                                )}
-                                {idx >= 0 && <span className="np-badge">{idx + 1}</span>}
-                              </button>
-                            );
-                          })}
-                      </div>
-                      <input ref={fileRef} type="file" accept="image/*,video/*" hidden onChange={onUpload} />
-                      <p className="hint" style={{ marginTop: 12 }}>
-                        <I.Info /> Tapni više slika i/ili videa — svaka postaje strana. Slike i video mogu da se mešaju.
-                      </p>
+                      {/* zum — odmah ispod slike */}
                       {slide.mediaId && (
                         <>
-                          <div className="divide" />
                           <div className="field">
-                            <label>Nameštanje slike (zum)</label>
+                            <label>Zum slike</label>
                             <div className="range-row">
                               <input
                                 type="range"
@@ -2024,8 +2025,57 @@ export default function Studio() {
                               <I.Info /> Prevuci sliku po platnu da je pomeriš, zumom je uvećaj.
                             </p>
                           </div>
+                          <div className="divide" />
                         </>
                       )}
+
+                      {/* dodavanje medija sa telefona */}
+                      <div className="field">
+                        <label>Dodaj medij</label>
+                        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                          <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => galleryRef.current?.click()}>
+                            <I.ImgIcon style={{ width: 16, height: 16 }} /> Iz galerije
+                          </button>
+                          <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => cameraRef.current?.click()}>
+                            <I.Camera style={{ width: 16, height: 16 }} /> Kamera
+                          </button>
+                        </div>
+                        <input ref={galleryRef} type="file" accept="image/*,video/*" multiple hidden onChange={onWizUpload} />
+                        <input ref={cameraRef} type="file" accept="image/*,video/*" capture="environment" hidden onChange={onWizUpload} />
+                        <p className="hint" style={{ marginTop: 10 }}>
+                          <I.Info /> Izaberi iz Photos galerije ili slikaj/snimaj kamerom. Možeš dodati više — svaka postaje strana.
+                        </p>
+                      </div>
+
+                      {/* ranije otpremljeno (bez uzoraka) — za ponovno korišćenje */}
+                      {(() => {
+                        const mine = media.filter((m) => !m.url.startsWith("/samples"));
+                        if (mine.length === 0) return null;
+                        return (
+                          <>
+                            <div className="divide" />
+                            <div className="mono-label" style={{ marginBottom: 8 }}>
+                              Ranije otpremljeno
+                            </div>
+                            <div className="media-grid">
+                              {mine.map((m) => {
+                                const idx = slideIndexForMedia(m.id);
+                                return (
+                                  <button key={m.id} className={`media-tile${idx >= 0 ? " sel" : ""}`} onClick={() => wizToggleMedia(m.id)}>
+                                    {isVideoUrl(m.url) ? <video src={m.url} muted playsInline preload="metadata" /> : <img src={m.url} alt={m.name} />}
+                                    {m.kind === "video" && (
+                                      <span className="vtag">
+                                        <I.Play />
+                                      </span>
+                                    )}
+                                    {idx >= 0 && <span className="np-badge">{idx + 1}</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </>
                   )}
 

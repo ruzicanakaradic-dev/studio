@@ -152,6 +152,12 @@ export const Journal = (p: SVGProps<SVGSVGElement>) => (
     <path d="M12 7v5l3 2" />
   </svg>
 );
+export const Camera = (p: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="M4 8h3l1.5-2h7L18 8h2a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
+    <circle cx="12" cy="13" r="3.2" />
+  </svg>
+);
 export const AlignLeft = (p: SVGProps<SVGSVGElement>) => (
   <svg {...s(p)}>
     <path d="M3 6h18M3 12h12M3 18h15" />
