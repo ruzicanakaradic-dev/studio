@@ -1,90 +1,69 @@
-# Povezivanje Studija sa Instagramom (najprostiji način — „nalepi token")
+# Povezivanje Studija sa Instagramom — „Poveži Instagram" dugme (OAuth)
 
-Cilj: u aplikaciji (korak „Sačuvaj") postoji dugme **„Objavi na Instagram"** koje
-jednim tapom šalje sliku/carousel/reels sa opisom i hashtagovima direktno na Ružičin
-nalog.
+Za Ružicu je ovo najlakše: u aplikaciji tapne **„Poveži Instagram"**, uloguje se na
+Instagram, klikne „Dozvoli" — i gotovo. Nikad ne dira token ni dashboard. Ispod je
+jednokratno podešavanje (radi ga Igor); Ružičin deo je samo taj jedan tap.
 
-Ovaj način **ne koristi OAuth** — nema „Poveži" dugmeta, nema redirect adrese, nema
-callback-a. Napraviš token jednom i nalepiš ga u Vercel. To je sve.
+> **Stalna adresa** (produkcioni domen): `https://studio-green-rho-18.vercel.app`.
+> NE koristi link sa nasumičnim delom (npr. `...-d9lo7stvz-...`) — to je jedan deploy
+> i menja se.
 
 ---
 
 ## Korak 1 — Instagram na Professional
+Instagram app → Podešavanja → „Account type and tools" → **Switch to professional
+account** → *Creator* ili *Business*. (Facebook stranica NIJE potrebna.)
 
-U Instagram aplikaciji: Podešavanja → „Account type and tools" → **Switch to
-professional account** → *Creator* ili *Business*. (Facebook stranica NIJE potrebna.)
-
-## Korak 2 — Meta aplikacija + token
-
-1. **developers.facebook.com** → prijava → **My Apps** → **Create App** → izaberi
-   use case sa **Instagram** („Access the Instagram API with Instagram Login").
-2. U aplikaciji: **Instagram** → **API setup with Instagram login**.
-3. U delu „**Generate access tokens**" dodaj Ružičin Instagram nalog (ona potvrdi
-   prijavu) i klikni **Generate token**. Kopiraj taj token (to je pristupni token).
-4. Da token traje 60 dana (a ne 1 sat), otvori ovaj link u browseru — zameni
-   `APP_SECRET` (Meta app → App settings → Basic → App secret) i `KRATAK_TOKEN`:
-
+## Korak 2 — Meta aplikacija
+1. **developers.facebook.com** → **My Apps** → **Create App**.
+2. Izaberi use case sa **Instagram** („Access the Instagram API with Instagram Login").
+3. Otvori **Instagram → API setup with Instagram login**.
+4. U **Business login settings / OAuth**, u polje **Valid OAuth Redirect URIs** nalepi:
    ```
-   https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=APP_SECRET&access_token=KRATAK_TOKEN
+   https://studio-green-rho-18.vercel.app/api/instagram/callback
    ```
+5. Zapamti **Instagram App ID** i **Instagram App Secret** (App settings → Basic).
 
-   Iz odgovora kopiraj `access_token` — to je **dugotrajni token** (IG_ACCESS_TOKEN).
+## Korak 3 — Dodaj Ružičin nalog kao tester
+App → **App roles → Roles** (ili Instagram → Roles) → dodaj Ružičin Instagram →
+ona prihvati poziv u Instagramu (Settings → Apps and websites → Tester invites).
+Za sopstveni nalog **ne treba App Review**.
 
-5. Uzmi **IG_USER_ID** — otvori u browseru (zameni token):
+## Korak 4 — Supabase (čuva token da se sam obnavlja)
+Supabase → **SQL Editor** → nalepi sadržaj `supabase/migrations/0002_instagram.sql`
+→ **Run**. Zatim iz **Settings → API** kopiraj `service_role` ključ (za sledeći korak).
 
-   ```
-   https://graph.instagram.com/me?fields=id,username&access_token=DUGOTRAJNI_TOKEN
-   ```
-
-   Kopiraj vrednost `id`.
-
-## Korak 3 — Nalepi u Vercel
-
-Vercel → projekat → **Settings → Environment Variables** (Production i Preview):
+## Korak 5 — Vercel env varijable
+Vercel → projekat → **Settings → Environment Variables** (Production + Preview):
 
 | Ime | Vrednost |
 |---|---|
-| `IG_ACCESS_TOKEN` | dugotrajni token iz koraka 2.4 |
-| `IG_USER_ID` | id iz koraka 2.5 |
+| `META_APP_ID` | Instagram App ID (korak 2.5) |
+| `META_APP_SECRET` | Instagram App Secret (korak 2.5) |
+| `NEXT_PUBLIC_APP_URL` | `https://studio-green-rho-18.vercel.app` (bez `/` na kraju, bez `/studio`) |
+| `SUPABASE_SERVICE_ROLE_KEY` | service_role ključ (korak 4) |
+| `CRON_SECRET` | izmišljen dug string (za automatsko obnavljanje tokena) |
 
-Sačuvaj → **Redeploy**. Gotovo — u koraku „Sačuvaj" sada stoji **„Objavi na
-Instagram (@nalog)"**. Napišeš opis + hashtagove u koraku „Tekst" i tapneš objavu.
+Sačuvaj → **Redeploy** (da varijable uđu u pogon).
 
-> Bezbednost: ove varijable su **serverske** (bez `NEXT_PUBLIC_`). Token nikad ne ide
-> u browser.
+## Korak 6 — Poveži i objavi
+Otvori aplikaciju → napravi/otvori objavu → korak **„Sačuvaj"** → **„Poveži
+Instagram"** → uloguj se Ružičinim nalogom → „Dozvoli". Vraća te nazad i od tada u
+tom koraku stoji **„Objavi na Instagram (@nalog)"**. Napišeš opis + hashtagove u
+koraku „Tekst" i tapneš objavu. Po završetku dobiješ link „Otvori na Instagramu".
 
 ---
 
-## (Opciono) Da se token sam produžava — bez ručnog ponavljanja
-
-Token traje ~60 dana. Ako želiš da se sam obnavlja (da ne moraš da ga menjaš svaka
-dva meseca), dodaj još:
-
-1. Pokreni `supabase/migrations/0002_instagram.sql` u Supabase SQL Editoru.
-2. U Vercel env dodaj:
-   - `SUPABASE_SERVICE_ROLE_KEY` — Supabase → Settings → API → `service_role`
-   - `CRON_SECRET` — izmišljen dug string
-3. Redeploy. `vercel.json` već sadrži cron koji svakog 1. u mesecu produži token.
-
-Ako ovo preskočiš, sve radi — samo ćeš na ~2 meseca ponoviti korak 2 (nov token).
-
-## Ograničenja (dobro je znati)
-
-- Slike se šalju kao **JPEG** (aplikacija to radi automatski).
-- **Reels/video** Instagram prvo obradi, pa objava traje malo duže (par sekundi do
-  minut). Aplikacija sačeka da bude spreman.
-- Limit je **100 objava za 24h** (carousel = 1) — više nego dovoljno.
-- Ako objava padne, u **Dnevniku** piše razlog na jasnom jeziku.
-
-## Napredno (ako ipak želiš „Poveži Instagram" dugme / OAuth)
-
-Kod podržava i OAuth put. Tada umesto `IG_ACCESS_TOKEN`/`IG_USER_ID` postaviš
-`META_APP_ID`, `META_APP_SECRET`, `NEXT_PUBLIC_APP_URL` i u Meta app-u dodaš redirect
-`https://TVOJ-DOMEN/api/instagram/callback`. Ali „nalepi token" je jednostavniji i
-preporučen za jedan nalog.
+## Napomene
+- Token se **sam obnavlja** (Vercel Cron u `vercel.json`, koristi `CRON_SECRET`).
+- Slike idu kao **JPEG** (automatski). **Reels/video** Instagram prvo obradi, pa
+  objava traje par sekundi duže.
+- Limit: **100 objava / 24h** (carousel = 1).
+- Ako objava padne, razlog piše u **Dnevniku** jasnim jezikom.
+- Najčešća greška: redirect adresa se ne poklapa. Mora **tačno** ista u Meta app-u i u
+  `NEXT_PUBLIC_APP_URL` (ista stalna adresa, `https://`, bez `/` na kraju).
 
 ## Gde je šta u kodu
-
-- `src/lib/instagram.ts` — token (env ili baza), osvežavanje, kreiranje kontejnera, objava.
-- `src/app/api/instagram/*` — `status`, `publish`, `refresh` (+ `connect`/`callback` za OAuth put).
+- `src/lib/instagram.ts` — OAuth, token (baza ili env), obnavljanje, objava.
+- `src/app/api/instagram/*` — `connect`, `callback`, `status`, `publish`, `disconnect`, `refresh`.
 - UI: korak „Sačuvaj" u `src/components/Studio.tsx` + `renderSlideJpeg` u `src/lib/exporter.ts`.
