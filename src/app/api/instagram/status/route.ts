@@ -1,21 +1,14 @@
 import { NextResponse } from "next/server";
-import { getConnection, isInstagramConfigured } from "@/lib/instagram";
-import { isAdminConfigured } from "@/lib/supabase/admin";
+import { getStatus, isInstagramConfigured } from "@/lib/instagram";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Status veze — bez tokena (token nikad ne ide na klijent). */
 export async function GET() {
-  const configured = isInstagramConfigured && isAdminConfigured;
-  let connected = false;
-  let username: string | null = null;
-  let expiresAt: string | null = null;
-  if (configured) {
-    const conn = await getConnection();
-    connected = Boolean(conn?.access_token && conn?.ig_user_id);
-    username = conn?.username ?? null;
-    expiresAt = conn?.expires_at ?? null;
+  if (!isInstagramConfigured) {
+    return NextResponse.json({ configured: false, connected: false, username: null, expiresAt: null });
   }
-  return NextResponse.json({ configured, connected, username, expiresAt });
+  const s = await getStatus();
+  return NextResponse.json({ configured: true, ...s });
 }

@@ -1,4 +1,4 @@
-import { createAdminClient } from "./supabase/admin";
+import { createAdminClient, isAdminConfigured } from "./supabase/admin";
 
 /**
  * Instagram Platform API — "Instagram API with Instagram Login" (bez Facebook stranice).
@@ -16,7 +16,13 @@ const GRAPH = "https://graph.instagram.com";
 export const IG_APP_ID = process.env.META_APP_ID ?? process.env.INSTAGRAM_APP_ID ?? "";
 const IG_APP_SECRET = process.env.META_APP_SECRET ?? process.env.INSTAGRAM_APP_SECRET ?? "";
 
-export const isInstagramConfigured = Boolean(IG_APP_ID && IG_APP_SECRET);
+// Najprostiji put: token se nalepi kao env varijabla (bez OAuth-a).
+const ENV_IG_TOKEN = process.env.IG_ACCESS_TOKEN ?? "";
+const ENV_IG_USER_ID = process.env.IG_USER_ID ?? "";
+
+export const hasEnvToken = Boolean(ENV_IG_TOKEN && ENV_IG_USER_ID);
+// Aplikacija je „spremna za Instagram" ako imamo ILI nalepljen token ILI OAuth ključeve.
+export const isInstagramConfigured = Boolean(hasEnvToken || (IG_APP_ID && IG_APP_SECRET));
 
 // ————————————————————————————— OAuth ——————————————————————————————
 
@@ -142,25 +148,66 @@ export async function clearConnection(): Promise<boolean> {
  */
 export async function getValidToken(): Promise<{ token: string; igUserId: string } | null> {
   const conn = await getConnection();
-  if (!conn?.access_token || !conn.ig_user_id) return null;
-  let token = conn.access_token;
-  const expMs = conn.expires_at ? new Date(conn.expires_at).getTime() : 0;
-  const weekMs = 7 * 24 * 60 * 60 * 1000;
-  if (expMs && expMs - Date.now() < weekMs) {
-    try {
-      const r = await refreshLongLivedToken(token);
-      token = r.accessToken;
-      await saveConnection({
-        igUserId: conn.ig_user_id,
-        username: conn.username ?? "",
-        accessToken: r.accessToken,
-        expiresIn: r.expiresIn,
-      });
-    } catch {
-      // ako osvežavanje padne, probaj sa postojećim tokenom
+  if (conn?.access_token && conn.ig_user_id) {
+    let token = conn.access_token;
+    const expMs = conn.expires_at ? new Date(conn.expires_at).getTime() : 0;
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    if (expMs && expMs - Date.now() < weekMs) {
+      try {
+        const r = await refreshLongLivedToken(token); // ne traži app secret — dovoljan je token
+        token = r.accessToken;
+        await saveConnection({
+          igUserId: conn.ig_user_id,
+          username: conn.username ?? "",
+          accessToken: r.accessToken,
+          expiresIn: r.expiresIn,
+        });
+      } catch {
+        // ako osvežavanje padne, probaj sa postojećim tokenom
+      }
     }
+    return { token, igUserId: conn.ig_user_id };
   }
-  return { token, igUserId: conn.ig_user_id };
+
+  // Nema reda u bazi — „nalepi token" put (env varijable).
+  if (hasEnvToken) {
+    // ako je Supabase dostupan, poseji bazu da bi kasnije radilo auto-osvežavanje
+    if (isAdminConfigured) {
+      try {
+        const me = await getMe(ENV_IG_TOKEN);
+        await saveConnection({
+          igUserId: me.id || ENV_IG_USER_ID,
+          username: me.username,
+          accessToken: ENV_IG_TOKEN,
+          expiresIn: 60 * 24 * 60 * 60,
+        });
+        return { token: ENV_IG_TOKEN, igUserId: me.id || ENV_IG_USER_ID };
+      } catch {
+        /* i dalje koristi env token direktno */
+      }
+    }
+    return { token: ENV_IG_TOKEN, igUserId: ENV_IG_USER_ID };
+  }
+
+  return null;
+}
+
+/** Status veze za UI — pokriva i „nalepi token" i OAuth put. */
+export async function getStatus(): Promise<{ connected: boolean; username: string | null; expiresAt: string | null }> {
+  const conn = await getConnection();
+  if (conn?.access_token && conn.ig_user_id) {
+    return { connected: true, username: conn.username ?? null, expiresAt: conn.expires_at ?? null };
+  }
+  if (hasEnvToken) {
+    let username: string | null = null;
+    try {
+      username = (await getMe(ENV_IG_TOKEN)).username;
+    } catch {
+      /* nalog povezan ali ime nije dostupno */
+    }
+    return { connected: true, username, expiresAt: null };
+  }
+  return { connected: false, username: null, expiresAt: null };
 }
 
 // ————————————————————————————— Objavljivanje ——————————————————————————————
